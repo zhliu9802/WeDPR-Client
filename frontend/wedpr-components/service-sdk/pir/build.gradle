@@ -1,0 +1,11 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+dependencies{
+    api project(":wedpr-components-db-mapper-service-publish")
+    api project(":wedpr-common-utils")
+    api project(":wedpr-components-crypto")
+    api project(":wedpr-components-api-credential")
+    api ("com.webank.wedpr:wedpr-gateway-sdk:${wedprGatewaySDKVersion}")
+}

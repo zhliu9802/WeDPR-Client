@@ -1,0 +1,195 @@
+# =============================================================================
+# WeDPR 一键部署配置文件
+# =============================================================================
+# 使用方式:
+#   1. cp deploy.conf.example deploy.conf
+#   2. 按实际环境修改 deploy.conf 中的值
+#   3. ./deploy.sh all
+#
+# 说明:
+#   - 本文件由 deploy.sh 通过 source 加载，格式为 KEY=VALUE
+#   - deploy.conf 可能含数据库密码等敏感信息，请勿提交到 Git
+#   - 更完整说明见: docs/站点端本地构建与服务器部署指南.md 第十四章
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 部署角色
+# -----------------------------------------------------------------------------
+
+# DEPLOY_ROLE: 部署目标角色
+#   - site  : 站点端（机构业务：wedpr-web + wedpr-site），当前脚本已实现
+#   - admin : 管理端（wedpr-admin），预留；本仓库若无该模块则无需修改
+# 写入目标: 暂无（预留扩展）
+DEPLOY_ROLE=site
+
+# -----------------------------------------------------------------------------
+# 网络地址
+# -----------------------------------------------------------------------------
+
+# SITE_IP: 站点端服务器对外 IP 地址
+#   - 写入 wedpr.properties → wedpr.transport.host_ip
+#   - 用于 Nginx server_name、status 命令中的访问提示
+#   - 示例: 机构用户浏览器访问 http://10.60.94.123/
+SITE_IP=10.60.94.123
+
+# ADMIN_IP: 管理端服务器 IP 地址
+#   - 不直接写入站点配置，用于脚本提示（如在管理端登记机构）
+#   - BLOCKCHAIN_PEER 未单独配置时，默认使用 ${ADMIN_IP}:20200
+#   - 示例: 平台管理员访问 http://10.60.94.1/
+ADMIN_IP=10.60.94.1
+
+# AGENCY_NAME: 本机构英文标识（全平台唯一）
+#   - 写入 wedpr.properties → wedpr.agency
+#   - 写入 wedpr.transport.nodeID → wedpr-site-node-${AGENCY_NAME}
+#   - 必须与管理端「机构管理」中登记的 agencyName 完全一致
+#   - 多机构部署时每个站点使用不同名称，如 agency0、agency1
+AGENCY_NAME=agency0
+
+# -----------------------------------------------------------------------------
+# MySQL 数据库
+# -----------------------------------------------------------------------------
+
+# MYSQL_HOST: MySQL 服务地址
+#   - 写入 JDBC 连接串 wedpr.mybatis.url
+#   - 数据库与站点同机时填 127.0.0.1；独立数据库机填实际 IP
+MYSQL_HOST=127.0.0.1
+
+# MYSQL_PORT: MySQL 服务端口
+#   - 写入 JDBC 连接串，默认 3306
+MYSQL_PORT=3306
+
+# MYSQL_DB: 业务数据库名
+#   - init-db 时 CREATE DATABASE 的库名
+#   - 站点端与管理端可共用库名但建议分库（如 wedpr / wedpr_admin）
+MYSQL_DB=wedpr
+
+# MYSQL_USER: 应用运行时使用的数据库账号（业务员账号）
+#   - 写入 wedpr.properties → wedpr.mybatis.username
+#   - wedpr-site 启动后始终用此账号连接数据库
+#   - 只需对 MYSQL_DB 库有读写权限，权限应小于 root
+MYSQL_USER=wedpr
+
+# MYSQL_PASSWORD: MYSQL_USER 的密码
+#   - 写入 wedpr.properties → wedpr.mybatis.password
+#   - init-db 导入 SQL 时也使用此账号密码
+#   - 生产环境请使用强密码
+MYSQL_PASSWORD=wedpr1234
+
+# MYSQL_ROOT_USER: 数据库管理员账号（仅 init-db 建库阶段使用）
+#   - 不写入应用配置，deploy.sh 内部临时使用
+#   - 用于 CREATE DATABASE、CREATE USER、GRANT 等管理操作
+#   - 与 MYSQL_USER 区别: root 是「建库时用的管理员」，wedpr 是「日常跑业务的账号」
+MYSQL_ROOT_USER=root
+
+# MYSQL_ROOT_PASSWORD: MYSQL_ROOT_USER 的密码
+#   - 非空时: init-db 用 root 建库建用户，再用 wedpr 导入 SQL（推荐）
+#   - 为空时: init-db 尝试直接用 MYSQL_USER 建库（需该账号已有建库权限）
+#   - 站点日常运行不依赖 root，仅首次部署 init-db / all 时需要
+MYSQL_ROOT_PASSWORD=
+
+# -----------------------------------------------------------------------------
+# C++ 隐私计算网关（ppc-gateway-service）
+# -----------------------------------------------------------------------------
+
+# GATEWAY_GRPC_PORT: C++ 网关 gRPC 监听端口
+#   - 写入 wedpr.properties → wedpr.transport.gateway_targets=ipv4:${SITE_IP}:${端口}
+#   - 管理端登记机构时 gatewayEndpoint 填: ${SITE_IP}:${GATEWAY_GRPC_PORT}
+#   - 默认 40600；管理端机器需能访问此端口（防火墙出站/入站）
+#   - 未部署网关时站点可启动，但 PSI/PIR/MPC 等计算任务无法执行
+GATEWAY_GRPC_PORT=40600
+
+# GATEWAY_API_TOKEN: 网关 API 鉴权 Token
+#   - 写入 wedpr.properties → wedpr.executor.psi.token、wedpr.executor.mpc.token
+#   - 必须与 C++ 网关配置中的 wedpr_api_token 一致
+#   - 各机构建议使用不同 token，如 wedpr_api_token_agency0
+GATEWAY_API_TOKEN=wedpr_api_token_agency0
+
+# SITE_TRANSPORT_PORT: 站点端 Java Transport 本地监听端口
+#   - 写入 wedpr.properties → wedpr.transport.listen_port
+#   - 用于与管理端/网关的消息通信，单机单机构默认 6001
+#   - 同一机器部署多站点时需错开端口（如 6001、6002）
+SITE_TRANSPORT_PORT=6001
+
+# -----------------------------------------------------------------------------
+# 区块链 FISCO BCOS（跨机构元数据同步，可选但对接管理端时建议配置）
+# -----------------------------------------------------------------------------
+
+# BLOCKCHAIN_GROUP: 区块链群组 ID
+#   - 写入 wedpr.properties → wedpr.chain.group_id
+#   - 写入 config.toml → defaultGroup
+#   - 站点端与管理端、链上合约必须一致，通常为 group0
+BLOCKCHAIN_GROUP=group0
+
+# BLOCKCHAIN_PEER: FISCO BCOS 节点 RPC 地址（IP:端口）
+#   - 写入 config.toml → peers=["..."]
+#   - 链部署在管理端时示例: 10.60.94.1:20200
+#   - 需同时将 ca.crt、sdk.crt、sdk.key 放到 wedpr-site/conf/ 目录
+BLOCKCHAIN_PEER=10.60.94.1:20200
+
+# RECORDER_FACTORY_CONTRACT: 资源记录工厂合约地址
+#   - 写入 wedpr.properties → wedpr.sync.recorder.factory.contract_address
+#   - 部署 wedpr-sol 合约后从控制台获取，站点与管理端必须相同
+#   - 下方为仓库示例值，生产环境请替换为真实地址
+RECORDER_FACTORY_CONTRACT=0x4721d1a77e0e76851d460073e64ea06d9c104194
+
+# SEQUENCER_CONTRACT: 资源排序合约地址
+#   - 写入 wedpr.properties → wedpr.sync.sequencer.contract_address
+#   - 与 RECORDER_FACTORY_CONTRACT 一同部署后填入
+SEQUENCER_CONTRACT=0x6849f21d1e455e9f0712b1e99fa4fcd23758e8f1
+
+# -----------------------------------------------------------------------------
+# 安装路径
+# -----------------------------------------------------------------------------
+
+# DEPLOY_DIR: 站点端编译产物运行目录（后端 dist 目录）
+#   - 为空时默认: frontend/wedpr-site/dist
+#   - 生产环境建议: /data/home/wedpr/wedpr-site
+#   - 目录内应包含: apps/、lib/、conf/、web/、start.sh、stop.sh
+#   - build 命令会将前端静态文件复制到 ${DEPLOY_DIR}/web/
+DEPLOY_DIR=
+
+# -----------------------------------------------------------------------------
+# Nginx 反向代理
+# -----------------------------------------------------------------------------
+
+# ENABLE_NGINX: 执行 ./deploy.sh all 时是否自动配置 Nginx
+#   - true  : all 命令在 root 下自动执行 nginx 子命令
+#   - false : 跳过，需手工配置 Web 服务器或仅用 8005 端口访问 API
+#   - 生产环境用户通过 80/443 访问页面时建议 true
+ENABLE_NGINX=true
+
+# NGINX_PORT: Nginx 对外监听端口
+#   - 用于生成 /etc/nginx/sites-available/wedpr-site
+#   - 默认 80；HTTPS 场景通常另配 443（需手工扩展证书配置）
+#   - 访问地址: http://${SITE_IP}:${NGINX_PORT}/
+NGINX_PORT=80
+
+# -----------------------------------------------------------------------------
+# 构建选项
+# -----------------------------------------------------------------------------
+
+# SKIP_TESTS: Gradle 构建是否跳过单元测试
+#   - true  : 执行 ./gradlew :wedpr-site:jar -x test，加快构建
+#   - false : 运行全部测试，耗时更长
+SKIP_TESTS=true
+
+# SKIP_NPM_INSTALL: 前端构建是否跳过 npm install
+#   - false : 每次 build 执行 npm install（首次或依赖变更时推荐）
+#   - true  : 跳过 install 直接 build:pro，加快重复构建（需 node_modules 已存在）
+SKIP_NPM_INSTALL=false
+
+# JAVA_XMX: JVM 最大堆内存（备用启动路径使用）
+#   - 当 dist/start.sh 不可用时，deploy.sh start 的 java 命令使用此值
+#   - start.sh 内有独立内存参数；大并发或大数据集可适当调大，如 1024m
+JAVA_XMX=512m
+
+# -----------------------------------------------------------------------------
+# 时区
+# -----------------------------------------------------------------------------
+
+# TIMEZONE: 系统与 JVM 时区
+#   - setup_timezone: root 下执行 timedatectl set-timezone
+#   - start 时 JVM 参数: -Duser.timezone=${TIMEZONE}
+#   - 中国地区推荐 Asia/Shanghai（UTC+8），避免日志和业务时间慢 8 小时
+#   - MySQL 时区另见文档 7.12 节（JDBC 已含 serverTimezone=GMT%2B8）
+TIMEZONE=Asia/Shanghai

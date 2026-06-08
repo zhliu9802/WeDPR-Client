@@ -1,0 +1,39 @@
+HOST: "0.0.0.0"
+HTTP_PORT: 43471
+
+WEDPR_ZONE: 'wedpr1'
+AGENCY_ID: 'WeBank'
+
+PUBLIC_KEY_LENGTH: 2048
+
+MAX_MESSAGE_LENGTH_MB: 100
+TASK_TIMEOUT_H: 1800
+
+DB_TYPE: "mysql"
+SQLALCHEMY_DATABASE_URI: "mysql://[*user_ppcsmodeladm]:[*pass_ppcsmodeladm]@[@4346-TDSQL_VIP]:[@4346-TDSQL_PORT]/ppcsmodeladm?autocommit=true&charset=utf8mb4"
+
+# interagency services
+HDFS_URL: "http://127.0.0.1:50070"
+# HDFS,
+STORAGE_TYPE: "HDFS"
+HDFS_USER: "root"
+HDFS_HOME: "/user/ppc/model/webank"
+HDFS_ENABLE_AUTH: False
+# the hdfs auth principal
+HDFS_AUTH_PRINCIPAL: "root@NODE.DC1.CONSUL"
+# the auth password
+HDFS_AUTH_PASSWORD: ""
+# the host name override
+HDFS_HOSTNAME_OVERRIDE: "wedpr-0001"
+
+JOB_TEMP_DIR: ".cache/job"
+
+# the transport config
+transport_threadpool_size: 4
+transport_node_id: "MODEL_WeBank_NODE"
+transport_gateway_targets: "ipv4:127.0.0.1:40600,127.0.0.1:40601"
+transport_host_ip: "127.0.0.1"
+transport_listen_port: 6500
+
+# the log retriever config
+LOG_PATH: "logs/wedpr-model.log"

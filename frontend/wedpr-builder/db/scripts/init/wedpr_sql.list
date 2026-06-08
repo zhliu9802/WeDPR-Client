@@ -1,0 +1,3 @@
+source ../../wedpr_ddl.sql
+source ../../tables_quartz.sql
+source ../../wedpr_dml.sql

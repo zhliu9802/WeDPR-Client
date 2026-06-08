@@ -1,0 +1,20 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+
+dependencies {
+    api libraries.spring, libraries.spring_boot
+
+    api project(":wedpr-common-protocol")
+    api project(":wedpr-common-utils")
+    api project(":wedpr-components-uuid")
+    api("com.google.code.gson:gson:${gsonVersion}")
+
+    api("org.apache.hadoop:hadoop-common:${hadoopVersion}"){
+        exclude group: 'javax.servlet', module: 'servlet-api'
+    }
+    api("org.apache.hadoop:hadoop-client:${hadoopVersion}"){
+        exclude group: 'javax.servlet', module: 'servlet-api'
+    }
+}

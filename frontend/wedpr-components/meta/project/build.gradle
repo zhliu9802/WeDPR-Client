@@ -1,0 +1,11 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+dependencies{
+    api project(":wedpr-components-mybatis")
+    api project(":wedpr-common-protocol")
+    api project(":wedpr-components-uuid")
+    api project(":wedpr-components-resource-follower")
+    api project(":wedpr-components-db-mapper-dataset")
+}

@@ -1,0 +1,13 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+dependencies{
+    api project(":wedpr-components-token-auth")
+    api project(":wedpr-components-mybatis")
+    api project(":wedpr-components-uuid")
+    api project(":wedpr-components-sys-config")
+    api project(":wedpr-components-http-client")
+    api project(":wedpr-components-hook")
+    api project(":wedpr-components-task-plugin-api")
+}

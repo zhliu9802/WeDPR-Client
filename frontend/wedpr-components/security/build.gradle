@@ -1,0 +1,12 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+
+dependencies {
+    api("org.springframework.security:spring-security-core:${springSecurityVersion}")
+    api("org.springframework.security:spring-security-web:${springSecurityWebVersion}")
+    api project(":wedpr-components-token-auth")
+    api project(":wedpr-components-user")
+    api project(":wedpr-components-api-credential")
+}

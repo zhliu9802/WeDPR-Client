@@ -1,0 +1,11 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+
+dependencies {
+    api project(":wedpr-common-utils")
+    api ("org.fisco-bcos.java-sdk:fisco-bcos-java-sdk:${bcosSDKVersion}"){
+        exclude group: "org.slf4j"
+    }
+}

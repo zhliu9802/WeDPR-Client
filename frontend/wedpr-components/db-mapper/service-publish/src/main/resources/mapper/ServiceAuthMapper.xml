@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+/*
+
+ * Copyright 2017-2025  [webank-wedpr]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ *
+ */
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.webank.wedpr.components.db.mapper.service.publish.dao.ServiceAuthMapper">
+    <resultMap id="ServiceAuthInfoMap" type="com.webank.wedpr.components.db.mapper.service.publish.dao.ServiceAuthInfo">
+        <id column="id" property="id"/>
+        <result column="service_id" property="serviceId"/>
+        <result column="access_key_id" property="accessKeyId"/>
+        <result column="accessible_user" property="accessibleUser"/>
+        <result column="accessible_agency" property="accessibleAgency"/>
+        <result column="expire_time" property="expireTime"/>
+        <result column="apply_time" property="applyTime"/>
+        <result column="last_update_time" property="lastUpdateTime"/>
+    </resultMap>
+    <insert id="batchInsertServiceAuth" parameterType="java.util.List">
+        insert into wedpr_service_auth_table(`id`, `service_id`, `access_key_id`, `accessible_user`, `accessible_agency`,
+                                            `expire_time`, `apply_time`) values
+        <foreach collection="serviceAuthInfoList" item = "serviceAuthInfo" index = "index" separator=",">
+            (#{serviceAuthInfo.id}, #{serviceAuthInfo.serviceId}, #{serviceAuthInfo.accessKeyId},
+             #{serviceAuthInfo.accessibleUser},  #{serviceAuthInfo.accessibleAgency},
+             #{serviceAuthInfo.expireTime},NOW())
+        </foreach>
+    </insert>
+    <select id="queryServiceAuth" resultMap="ServiceAuthInfoMap">
+        select *
+        from wedpr_service_auth_table where 1=1
+        <choose>
+            <when test="condition != null and condition != ''">
+                <if test="condition.id != null and condition.id !=''">
+                    and `id` = #{condition.id}
+                </if>
+                <if test="condition.serviceId != null and condition.serviceId !=''">
+                    and `service_id` = #{condition.serviceId}
+                </if>
+                <if test="condition.accessKeyId != null and condition.accessKeyId !=''">
+                    and `access_key_id` = #{condition.accessKeyId}
+                </if>
+                <if test="condition.accessibleUser != null and condition.accessibleUser !=''">
+                    and `accessible_user` = #{condition.accessibleUser}
+                </if>
+                <if test="condition.accessibleAgency != null and condition.accessibleAgency !=''">
+                    and `accessible_agency` = #{condition.accessibleAgency}
+                </if>
+                <if test="condition.startTime != null and condition.startTime  != ''">
+                    <![CDATA[ and datediff(apply_time, #{condition.startTime}) >= 0]]>
+                </if>
+                <if test="condition.endTime != null and condition.endTime  != ''">
+                    <![CDATA[ and datediff(apply_time, #{condition.endTime}) <= 0]]>
+                </if>
+            </when>
+        </choose>
+        <if test="serviceIdList != null and serviceIdList.size > 0">
+            and `service_id` in
+            <foreach item="serviceId" collection="serviceIdList" open="(" close=")" separator=",">
+                #{serviceId}
+            </foreach>
+        </if>
+        order by `last_update_time` desc
+    </select>
+    <delete id="deleteService">
+        delete from `wedpr_service_auth_table` where `service_id` = #{serviceId}
+    </delete>
+</mapper>

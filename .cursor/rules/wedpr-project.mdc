@@ -1,0 +1,31 @@
+---
+description: WeDPR 架构说明与前后端启动命令
+alwaysApply: false
+---
+# WeDPR 架构与前后端启动
+
+## 架构
+
+WeDPR 是微众银行隐私计算平台：**wedpr-web**（Vue2 管理台）通过 `/api` 调用 **wedpr-site**（Spring Boot 站点端，端口 8005）；站点端依赖 **MySQL** 存业务数据、**FISCO BCOS** 做跨机构资源同步，并通过 JNI 网关 SDK 连接 **ppc-gateway-service** / **ppc-pro-node**（C++ 组件，PSI/PIR 等）。源码分 **frontend**（Java + 前端）与 **backend**（C++ 核心）两个目录。
+
+## 后端启动（wedpr-site）
+
+```bash
+cd /root/Project/WeDPR/frontend
+./gradlew build -x test
+cp wedpr-site/conf/*.properties wedpr-site/conf/config.toml wedpr-site/dist/conf/
+
+cd wedpr-site/dist
+java -Dfile.encoding=UTF-8 -Duser.timezone=Asia/Shanghai -DserviceName=WEDPR-SITE -DserviceConfigPath=$(pwd)/conf \
+  -Xmx512m -cp "conf/:apps/*:lib/*" com.webank.wedpr.site.main.SiteServiceApplication
+```
+
+## 前端启动（wedpr-web）
+
+```bash
+cd /root/Project/WeDPR/frontend/wedpr-web
+npm install
+npm run serve
+```
+
+访问：`http://<主机IP>:3000`（devServer 监听 `0.0.0.0:3000`，API 代理至 `127.0.0.1:8005`）。默认账号 `admin` / `123456`。

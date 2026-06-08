@@ -1,0 +1,53 @@
+# ===== Build artifacts & dependencies (excluded from repo) =====
+
+# C++ / vcpkg / cmake (backend/cpp)
+backend/cpp/vcpkg/
+backend/cpp/build/
+backend/cpp/deps/
+**/cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
+*.exe
+
+# Node
+**/node_modules/
+**/dist/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# Gradle
+.gradle/
+**/build/
+!src/**/build/
+gradle-app.setting
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs & local
+*.log
+logs/
+
+# ===== Secrets / local config =====
+deploy.conf
+*.pem
+*.key
+.env
+.env.*

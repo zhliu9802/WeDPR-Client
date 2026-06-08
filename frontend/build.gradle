@@ -1,0 +1,348 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'maven-publish'
+    id 'java-library'
+    id 'java'
+    id 'org.ajoberstar.grgit' version '4.1.1'
+    id 'com.github.sherter.google-java-format' version '0.9'
+}
+println("* Notice: current gradle version is " + gradle.gradleVersion)
+// Additional attribute definition
+ext {
+    if (!project.hasProperty("ossrhUsername")) {
+        ossrhUsername="xxx"
+    }
+
+    if (!project.hasProperty("ossrhPassword")) {
+        ossrhPassword="xxx"
+    }
+    jacksonVersion = "2.18.1"
+    apacheCommonLangVersion = "3.17.0"
+    lombokVersion = "1.18.32"
+    junitVersion = "4.13.2"
+    hadoopVersion = "3.4.0"
+    mysqlConnectorVersion = "8.2.0"
+    // Note: pageHelper depends on jsqlParser,
+    // it's jsqlParser version should be equal to jsqlParser version of mybatis-plus
+    pageHelperVersion = "5.3.1"
+    //mybatisPlusVersion = "3.5.7"
+    mybatisPlusVersion = "3.5.3.1"
+    druidVersion = "1.2.23"
+    //springVersion = "5.3.34"
+    //springBootVersion = "2.7.12"
+
+
+    // the spring related version
+    springVersion = "5.2.22.RELEASE"
+    springSecurityVersion="5.7.12"
+    springSecurityWebVersion="5.7.13"
+    springWebVersion="5.3.39"
+    springWebmvcVersion="5.3.39"
+
+    // the spring-boot related version
+    springBootVersion = "2.5.12"
+    springBootStarterWebVersion="2.5.12"
+    springBootAutoConfigureVersion="2.5.15"
+    springBootActuatorVersion="2.7.18"
+    springfoxVersion = "3.0.0"
+    snakeyamlVersion="2.0"
+
+
+    log4jVersion = "2.23.1"
+    commonsCollectionsVersion = "3.2.2"
+    opencsvVersion = "5.9"
+    poiVersion = "5.3.0"
+    hiveVersion = "3.1.3"
+    httpClientVersion = "4.5.14"
+    yitterIdGeneratorVersion = "1.0.6"
+    bcosSDKVersion = "3.7.0"
+    jwtVersion = "3.5.0"
+    mybatisPlusGeneratorVersion = "3.4.1"
+    velocityVersion = "2.3"
+
+    guavaVersion = "32.0.1-jre"
+    bcprovVersion = "1.78.1"
+    googleAutoServiceVersion = "1.1.1"
+    wedprGatewaySDKVersion = "3.0.0"
+    gsonVersion = "2.10.1"
+    servletApiVersion="4.0.1"
+    javaeeApiVersion="8.0.1"
+
+    libraries = [
+            spring: [
+                    "org.springframework:spring-core:${springVersion}",
+                    "org.springframework:spring-beans:${springVersion}",
+                    "org.springframework:spring-context:${springVersion}",
+                    "org.springframework:spring-web:${springWebVersion}",
+                    "org.springframework:spring-jdbc:${springVersion}",
+                    "org.springframework:spring-tx:${springVersion}",
+                    "org.springframework:spring-webmvc:${springWebmvcVersion}",
+                    "org.springframework:spring-jcl:${springVersion}",
+                    "org.springframework:spring-aop:${springVersion}"
+            ],
+            spring_boot: [
+                    "org.springframework.boot:spring-boot-starter-web:${springBootStarterWebVersion}",
+                    "org.springframework.boot:spring-boot-starter-aop:${springBootVersion}",
+                    "org.springframework.boot:spring-boot-starter-validation:${springBootVersion}",
+                    "org.springframework.boot:spring-boot-actuator:${springBootVersion}",
+                    "org.springframework.boot:spring-boot-autoconfigure:${springBootAutoConfigureVersion}",
+                    "io.springfox:springfox-boot-starter:${springfoxVersion}",
+                    "org.springframework.boot:spring-boot-actuator:${springBootActuatorVersion}",
+                    "org.yaml:snakeyaml:${snakeyamlVersion}",
+                    "javax:javaee-api:${javaeeApiVersion}",
+            ]
+    ]
+}
+
+// check.dependsOn integrationTest
+// integrationTest.mustRunAfter test
+allprojects {
+    group = 'com.webank.wedpr'
+    version = '3.1.0'
+    apply plugin: 'maven-publish'
+    apply plugin: 'com.github.sherter.google-java-format'
+    apply plugin: 'idea'
+    apply plugin: 'eclipse'
+    apply plugin: 'java-library'
+    apply plugin: 'java'
+    apply plugin: 'jacoco'
+    apply plugin: 'signing'
+
+    configurations.all {
+        resolutionStrategy.cacheChangingModulesFor 30, 'seconds'
+    }
+    jacoco {
+        toolVersion = "0.8.6"
+    }
+    jacocoTestReport {
+        reports {
+            xml.enabled true
+            html.enabled false
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+    }
+
+    // In this section you declare where to find the dependencies of your project
+    repositories {
+        maven {
+            allowInsecureProtocol = true
+            url "http://maven.aliyun.com/nexus/content/groups/public/"
+        }
+        maven { url "https://oss.sonatype.org/service/local/staging/deploy/maven2"}
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
+        maven {url "https://plugins.gradle.org/m2/"}
+        mavenCentral()
+    }
+
+    List logger = [
+            "org.apache.logging.log4j:log4j-api:${log4jVersion}",
+            "org.apache.logging.log4j:log4j-core:${log4jVersion}",
+            "org.apache.logging.log4j:log4j-slf4j-impl:${log4jVersion}",
+    ]
+
+    configurations.configureEach {
+        exclude group: "org.springframework.boot", module: "spring-boot-starter-logging"
+        exclude group: "org.slf4j", module: "log4j-over-slf4j"
+        exclude group: "org.slf4j", module: "slf4j-log4j12"
+        exclude group: "ch.qos.logback", module: "logback-classic"
+        exclude group: "org.slf4j", module: "slf4j-reload4j"
+        exclude group: "org.apache.logging.log4j", module: "log4j-to-slf4j"
+        exclude group: 'javax.servlet', module: 'servlet-api'
+    }
+
+    dependencies {
+        api logger
+        api("org.projectlombok:lombok:${lombokVersion}")
+        api("org.apache.commons:commons-lang3:${apacheCommonLangVersion}")
+        api("com.google.guava:guava:${guavaVersion}")
+
+        testImplementation ("junit:junit:${junitVersion}")
+        annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
+    }
+
+    clean.doLast {
+        file("dist/").deleteDir()
+    }
+}
+
+subprojects {
+    sourceSets {
+        main {
+            java {
+                srcDir 'src/main/java'
+            }
+            resources {
+                srcDir 'src/main/resources'
+            }
+        }
+        integrationTest {
+            java {
+                compileClasspath += main.output + test.output
+                runtimeClasspath += main.output + test.output
+                srcDir file('src/integration-test/java')
+            }
+            resources.srcDir file('src/integration-test/resources')
+        }
+    }
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+    googleJavaFormat {
+        toolVersion = '1.7'
+        options style: 'AOSP'
+        source = sourceSets*.allJava
+        include '**/*.java'
+        //source = *.allJava
+    }
+    configurations {
+        integrationTestCompile.extendsFrom testCompile
+        integrationTestRuntime.extendsFrom testRuntime
+    }
+    task integrationTest(type: Test) {
+        testClassesDirs = sourceSets.integrationTest.output.classesDirs
+        classpath = sourceSets.integrationTest.runtimeClasspath
+    }
+    tasks.withType(Copy) {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+    javadoc {
+        options.addStringOption('Xdoclint:none', '-quiet')
+        options.addStringOption('encoding', 'UTF-8')
+        options.addStringOption('charSet', 'UTF-8')
+    }
+
+    tasks.register('sourcesJar', Jar) {
+        from sourceSets.main.allSource
+        archiveClassifier = 'sources'
+    }
+
+    tasks.register('javadocJar', Jar) {
+        from javadoc
+        archiveClassifier = 'javadoc'
+    }
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+
+                artifactId "webank-" + project.name
+                groupId project.group
+                version project.version
+
+                from components.java
+                artifact sourcesJar
+                artifact javadocJar
+                pom {
+                    name = 'wedpr'
+                    description = 'wedpr'
+                    url = 'https://github.com/WeBankBlockchain/WeDPR'
+
+                    licenses {
+                        license {
+                            name = 'The Apache License, Version 2.0'
+                            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = 'zhangsan'
+                            name = 'zhangsan'
+                            email = 'zhangsan@example.com'
+                        }
+                    }
+                    scm {
+                        connection = 'https://github.com/wedpr/incubutor-wedpr.git'
+                        url = 'https://github.com/wedpr/incubutor-wedpr.git'
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                def releasesRepoURL = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                def snapshotsRepoURL = "https://oss.sonatype.org/content/repositories/snapshots"
+                url = !version.endsWith("SNAPSHOT") ? releasesRepoURL : snapshotsRepoURL
+
+                credentials {
+                    username ossrhUsername
+                    password ossrhPassword
+                }
+            }
+        }
+
+        signing {
+            sign publishing.publications.mavenJava
+        }
+    }
+    jar {
+        destinationDir file("dist/apps")
+        archiveName "webank-" + project.name + "-" + version + ".jar"
+
+        exclude "**/*.properties"
+        manifest {
+            try {
+                def repo = grgit.open(currentDir: project.rootDir)
+                if (repo != null) {
+                    def date = new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+                    def branch = repo.branch.getCurrent().getName()
+                    def commit = repo.head().getAbbreviatedId(40)
+
+                    attributes(["Implementation-Timestamp": date,
+                                "Git-Branch"              : branch,
+                                "Git-Commit"              : commit
+                    ])
+
+                    logger.info("  Commit : ")
+                    logger.info("  => date: {}", date)
+                    logger.info("  => branch: {}", branch)
+                    logger.info("  => commit: {}", commit)
+                }
+            } catch (Exception e) {
+                logger.warn(' .git not exist, cannot found commit info, e: {}', e)
+            }
+        } from sourceSets.main.output
+
+        doLast {
+            copy {
+                from file("conf/")
+                into "dist/conf"
+            }
+            copy {
+                from file("bin/start.sh")
+                into "dist/"
+            }
+            copy {
+                from file("bin/stop.sh")
+                into "dist/"
+            }
+            copy {
+                from file("bin/cert_script.sh")
+                into "dist/conf/"
+            }
+            copy {
+                from file("bin/package_cert_tool.sh")
+                into "dist/conf/"
+            }
+            copy {
+                from configurations.runtimeClasspath
+                into "dist/lib"
+            }
+            copy {
+                from file("build/libs/")
+                into "dist/apps"
+            }
+        }
+    }
+}
+googleJavaFormat {
+    //toolVersion = '1.7'
+    options style: 'AOSP'
+    source = sourceSets*.allJava
+    include '**/*.java'
+    //source = *.allJava
+}
+check.dependsOn jacocoTestReport

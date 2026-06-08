@@ -1,0 +1,68 @@
+# 本地单机构部署配置（agency0）
+[env]
+binary_path = "/root/Project/WeDPR/backend/cpp/build/bin"
+deploy_dir = "wedpr-local"
+
+[crypto]
+# 本地开发关闭 SSL，简化证书配置
+gateway_disable_ssl = true
+gateway_sm_ssl = false
+rpc_sm_ssl = false
+rpc_disable_ssl = true
+sm_crypto = false
+
+[[agency]]
+name = "agency0"
+holding_msg_minutes = 30
+
+    [agency.gateway]
+    deploy_ip=["127.0.0.1:1"]
+    listen_ip="0.0.0.0"
+    listen_port=40300
+    thread_count = 4
+    grpc_listen_ip="0.0.0.0"
+    grpc_listen_port=40600
+    [[agency.gateway.peers]]
+        agency = "agency0"
+        endpoints = ["127.0.0.1:40300"]
+
+    [[agency.node]]
+        disable_ra2018 = true
+        deploy_ip=["127.0.0.1:1"]
+        node_name = "node0"
+        grpc_listen_ip="0.0.0.0"
+        grpc_listen_port=40402
+        components = "node"
+        [agency.node.rpc]
+            listen_ip = "0.0.0.0"
+            listen_port = 10200
+            thread_count = 4
+        [agency.node.ra2018psi]
+            database = "ra2018_0"
+            cuckoofilter_capacity = 1
+            cuckoofilter_tagBits = 64
+            cuckoofilter_buckets_num = 4
+            cuckoofilter_max_kick_out_count = 20
+            trash_bucket_size = 10000
+            cuckoofilter_cache_size = 256
+            psi_cache_size = 1024
+            data_batch_size = 1000000
+            use_hdfs = false
+        [agency.node.storage]
+            host = "127.0.0.1"
+            port = 3306
+            user = "root"
+            password = "wedpr1234"
+            database = "wedpr"
+        [agency.node.hdfs_storage]
+            user = "root"
+            name_node = "127.0.0.1"
+            name_node_port = 9000
+            token = ""
+            enable_krb5_auth = false
+            auth_principal = ""
+            auth_password = ""
+            ccache_path = "/tmp/krb5cc_ppc_node"
+            krb5_conf_path = "conf/krb5.conf"
+        [agency.node.gateway]
+            gateway_grpc_target = ["127.0.0.1:40600"]

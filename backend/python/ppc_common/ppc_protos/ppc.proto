@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ppc.proto;
+
+
+message InputStatement {
+  string upstream = 1;
+  int64 output_index = 2;
+}
+
+message JobWorkerInputsStatement {
+  repeated InputStatement inputs_statement = 1;
+}
+
+message JobWorkerUpstreams {
+	repeated string upstreams = 1;
+}
+
+message JobWorkerOutputs {
+	repeated string outputs = 1;
+}

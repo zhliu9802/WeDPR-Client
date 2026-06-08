@@ -1,0 +1,10 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+
+dependencies {
+    api ("com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}")
+    api ("com.opencsv:opencsv:${opencsvVersion}")
+}
+

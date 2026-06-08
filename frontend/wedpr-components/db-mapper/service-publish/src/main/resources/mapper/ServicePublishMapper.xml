@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+/*
+
+ * Copyright 2017-2025  [webank-wedpr]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ *
+ */
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.webank.wedpr.components.db.mapper.service.publish.dao.PublishedServiceMapper">
+    <resultMap id="PublishedServiceInfoMap" type="com.webank.wedpr.components.db.mapper.service.publish.dao.PublishedServiceInfo">
+        <id column="service_id" property="serviceId"/>
+        <result column="service_name" property="serviceName"/>
+        <result column="service_desc" property="serviceDesc"/>
+        <result column="service_type" property="serviceType"/>
+        <result column="service_config" property="serviceConfig"/>
+        <result column="owner" property="owner"/>
+        <result column="agency" property="agency"/>
+        <result column="status" property="status"/>
+        <result column="sync_status" property="syncStatus"/>
+        <result column="status_msg" property="statusMsg"/>
+        <result column="create_time" property="createTime"/>
+        <result column="last_update_time" property="lastUpdateTime"/>
+    </resultMap>
+    <insert id="insertServiceInfo" parameterType="com.webank.wedpr.components.db.mapper.service.publish.dao.PublishedServiceInfo">
+        insert into wedpr_published_service(`service_id`, `service_name`, `service_desc`,
+                                        `service_type`, `service_config`, `owner`, `agency`, `status`, `create_time`) values
+            (#{serviceInfo.serviceId}, #{serviceInfo.serviceName}, #{serviceInfo.serviceDesc}, #{serviceInfo.serviceType},
+             #{serviceInfo.serviceConfig}, #{serviceInfo.owner}, #{serviceInfo.agency}, #{serviceInfo.status}, NOW())
+    </insert>
+    <select id="queryPublishedService" resultMap="PublishedServiceInfoMap">
+        select *
+        from wedpr_published_service where 1=1
+        <choose>
+            <when test="condition != null and condition != ''">
+                <if test="condition.serviceId != null and condition.serviceId !=''">
+                    and `service_id` = #{condition.serviceId}
+                </if>
+                <if test="condition.serviceName != null and condition.serviceName !=''">
+                    and `service_name` = #{condition.serviceName}
+                </if>
+                <if test="condition.syncStatus != null">
+                    and `sync_status` = #{condition.syncStatus}
+                </if>
+                <if test="condition.serviceType != null and condition.serviceType !=''">
+                    and `service_type` = #{condition.serviceType}
+                </if>
+                <if test="condition.agency!= null and condition.agency !=''">
+                    and `agency` = #{condition.agency}
+                </if>
+                <if test="condition.status!= null and condition.status !=''">
+                    and `status` = #{condition.status}
+                </if>
+                <if test="condition.owner!= null and condition.owner !=''">
+                    and `owner` = #{condition.owner}
+                </if>
+                <if test="condition.nonOwnerUserFilter!= null and condition.nonOwnerUserFilter == true">
+                    and case
+                    when `owner` != #{condition.loginUser} then `status` not in
+                        <foreach item="filterStatus" collection="condition.filterStatusList" open="(" close=")" separator=",">
+                            #{filterStatus}
+                        </foreach>
+                    else
+                    1=1
+                    end
+                </if>
+                <if test="condition.authStatus != null and condition.authStatus  == 'Authorized'.toString()">
+                    and
+                        `service_id` in(
+                            select distinct `service_id`
+                            from wedpr_service_auth_table
+                            where `accessible_user` = #{condition.accessibleUser}
+                            and `accessible_agency` = #{condition.accessibleAgency}
+                            and `expire_time` > UNIX_TIMESTAMP(NOW()))
+                </if>
+                <if test="condition.authStatus != null and condition.authStatus  == 'NoPermission'.toString()">
+                    and
+                        `service_id` not in(
+                            select distinct `service_id`
+                            from wedpr_service_auth_table
+                            where `accessible_user` = #{condition.accessibleUser}
+                            and `accessible_agency` = #{condition.accessibleAgency}
+                            and `expire_time` > UNIX_TIMESTAMP(NOW()))
+                </if>
+                <if test="condition.authStatus != null and condition.authStatus  == 'Expired'.toString()">
+                    and `service_id` in
+                    (
+                    select distinct `service_id`
+                    from wedpr_service_auth_table
+                    where `accessible_user` = #{condition.accessibleUser}
+                    and `accessible_agency` = #{condition.accessibleAgency}
+                    and  UNIX_TIMESTAMP(NOW()) >= `expire_time`
+                    )
+                </if>
+                <if test="condition.startTime != null and condition.startTime  != ''">
+                    <![CDATA[ and datediff(create_time, #{condition.startTime}) >= 0]]>
+                </if>
+                <if test="condition.endTime != null and condition.endTime  != ''">
+                    <![CDATA[ and datediff(create_time, #{condition.endTime}) <= 0]]>
+                </if>
+            </when>
+        </choose>
+        <if test="serviceIdList != null and serviceIdList.size > 0">
+            and `service_id` in
+            <foreach item="serviceId" collection="serviceIdList" open="(" close=")" separator=",">
+                #{serviceId}
+            </foreach>
+        </if>
+        order by `last_update_time` desc
+    </select>
+    <update id="updateServiceInfo" parameterType="com.webank.wedpr.components.db.mapper.service.publish.dao.PublishedServiceInfo">
+        update `wedpr_published_service`
+        <set>
+            <if test="updatedInfo.serviceName != null and updatedInfo.serviceName !=''">
+                `service_name` = #{updatedInfo.serviceName},
+            </if>
+            <if test="updatedInfo.status != null and updatedInfo.status !=''">
+                `status` = #{updatedInfo.status},
+            </if>
+            <if test="updatedInfo.statusMsg != null and updatedInfo.statusMsg !=''">
+                `status_msg` = #{updatedInfo.statusMsg},
+            </if>
+            <if test="updatedInfo.syncStatus != null and updatedInfo.syncStatus !=''">
+                `sync_status` = #{updatedInfo.syncStatus},
+            </if>
+            <if test="updatedInfo.serviceDesc != null and updatedInfo.serviceDesc !=''">
+                `service_desc` = #{updatedInfo.serviceDesc},
+            </if>
+            <if test="updatedInfo.serviceConfig != null and updatedInfo.serviceConfig !=''">
+                `service_config` = #{updatedInfo.serviceConfig},
+            </if>
+        </set>
+        where 1=1
+        <if test="updatedInfo.serviceId != null and updatedInfo.serviceId !=''">
+            and `service_id` = #{updatedInfo.serviceId}
+        </if>
+        <if test="updatedInfo.owner != null and updatedInfo.owner !=''">
+            and `owner` = #{updatedInfo.owner}
+        </if>
+        <if test="updatedInfo.agency != null and updatedInfo.agency !=''">
+            and `agency` = #{updatedInfo.agency}
+        </if>
+    </update>
+
+    <delete id="deleteServiceInfo">
+        delete from `wedpr_published_service` where 1 = 1
+        <if test="serviceId != null and serviceId !=''">
+            and `service_id` = #{serviceId}
+        </if>
+        <if test="owner != null and owner !=''">
+            and `owner` = #{owner}
+        </if>
+        <if test="agency != null and agency !=''">
+            and `agency` = #{agency}
+        </if>
+    </delete>
+</mapper>

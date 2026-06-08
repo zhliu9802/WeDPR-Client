@@ -1,0 +1,2 @@
+set(VERSION "3.0.0")
+set(PYTHON_TOOLKIT_VERSION "3.0.0")

@@ -1,0 +1,13 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+dependencies{
+    api project(":wedpr-components-storage")
+    api project(":wedpr-common-utils")
+    api project(":wedpr-components-db-mapper-dataset")
+    api project(":wedpr-components-db-mapper-service-publish")
+    api project(":wedpr-components-storage")
+    api project(":wedpr-components-service-sdk-pir")
+    api project(":wedpr-components-transport")
+}

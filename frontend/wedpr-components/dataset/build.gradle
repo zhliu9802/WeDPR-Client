@@ -1,0 +1,53 @@
+// Apply the java-library plugin to add support for Java Library
+plugins {
+    id 'java'
+}
+
+// Additional attribute definition
+ext {
+    dmVersion = "8.1.3.140"
+    postgresqlVersion = "42.5.6"
+    kingVersion = "8.6.0"
+}
+
+dependencies {
+    api project(":wedpr-components-token-auth")
+    api project(":wedpr-components-crypto")
+    api project(":wedpr-components-db-mapper-dataset")
+    api project(":wedpr-components-storage")
+    api project(":wedpr-components-authorization")
+
+    // hive
+    api("org.apache.hive:hive-jdbc:${hiveVersion}") {
+        exclude group: "org.apache.zookeeper", module: "zookeeper4"
+        exclude group: "org.eclipse.jetty.aggregate", module: "jetty-all"
+        exclude group: 'javax.servlet', module: 'servlet-api'
+        exclude group: 'org.apache.hadoop', module: 'hadoop-hdfs'
+        exclude group: 'org.apache.hadoop', module: 'hadoop-distcp'
+        exclude group: 'org.eclipse.jetty', module: 'jetty-runner'
+        exclude group: 'org.apache.logging.log4j'
+        // 避免与 Spring Boot Validation 冲突（validation-api 1.1 会导致 defaultValidator 启动失败）
+        exclude group: 'javax.validation', module: 'validation-api'
+    }
+    api "org.apache.hadoop:hadoop-distcp:${hadoopVersion}"
+    api "org.apache.hadoop:hadoop-hdfs:${hadoopVersion}"
+    api "org.apache.poi:poi:${poiVersion}"
+    api "org.apache.poi:poi-excelant:${poiVersion}"
+    api "com.opencsv:opencsv:${opencsvVersion}"
+
+    // da meng
+    api "com.dameng:DmJdbcDriver18:${dmVersion}"
+//    compile "com.dameng:DmDialect-for-hibernate5.0:${dmVersion}"
+//    compile 'org.hibernate:hibernate-core:5.3.20.Final'
+
+    // gauss
+    api "org.postgresql:postgresql:${postgresqlVersion}"
+
+    // king
+    api "cn.com.kingbase:kingbase8:${kingVersion}"
+//    compile files('libs/hibernate-4.dialect.jar')
+
+    // shen tong
+    api files('libs/oscarJDBC8.jar')
+//    compile files('libs/oscarHibernate54.jar')
+}

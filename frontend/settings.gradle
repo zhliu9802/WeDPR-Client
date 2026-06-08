@@ -1,0 +1,137 @@
+pluginManagement {
+    println "aliyun pluginManagement"
+    repositories {
+            maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
+            maven { url "https://maven.aliyun.com/repository/spring-plugin" }
+            gradlePluginPortal()
+    }
+}
+rootProject.name = "WeDPR";
+
+
+// submodules
+include ':wedpr-common-utils'
+project(':wedpr-common-utils').projectDir = file('wedpr-common/utils')
+
+include ':wedpr-common-protocol'
+project(':wedpr-common-protocol').projectDir = file('wedpr-common/protocol')
+
+include ":wedpr-components-http-client"
+project(":wedpr-components-http-client").projectDir = file("wedpr-components/http-client")
+
+include ":wedpr-components-storage"
+project(":wedpr-components-storage").projectDir = file("wedpr-components/storage")
+
+include ':wedpr-components-mybatis'
+project(':wedpr-components-mybatis').projectDir = file('wedpr-components/mybatis')
+
+include ':wedpr-components-uuid'
+project(':wedpr-components-uuid').projectDir = file('wedpr-components/uuid')
+
+include(':wedpr-components-sys-config')
+project(':wedpr-components-sys-config').projectDir = file('wedpr-components/meta/sys-config')
+
+include(':wedpr-components-loadbalancer')
+project(':wedpr-components-loadbalancer').projectDir = file('wedpr-components/meta/loadbalancer')
+
+
+include(":wedpr-components-blockchain")
+project(":wedpr-components-blockchain").projectDir = file("wedpr-components/blockchain")
+
+include(":wedpr-components-leader-election")
+project(":wedpr-components-leader-election").projectDir = file("wedpr-components/leader-election")
+
+include ":wedpr-components-sync"
+project(":wedpr-components-sync").projectDir=file("wedpr-components/sync")
+
+include ":wedpr-components-quartz"
+project(":wedpr-components-quartz").projectDir=file("wedpr-components/quartz")
+
+include ":wedpr-components-resource-follower"
+project(":wedpr-components-resource-follower").projectDir=file("wedpr-components/meta/resource-follower")
+
+include ":wedpr-components-setting-template"
+project(":wedpr-components-setting-template").projectDir=file("wedpr-components/meta/setting-template")
+
+include ":wedpr-components-project"
+project(":wedpr-components-project").projectDir=file("wedpr-components/meta/project")
+
+include ":wedpr-components-agency"
+project(":wedpr-components-agency").projectDir=file("wedpr-components/meta/agency")
+
+include ":wedpr-components-authorization"
+project(":wedpr-components-authorization").projectDir=file("wedpr-components/authorization")
+
+include "wedpr-components-dataset"
+project(":wedpr-components-dataset").projectDir=file("wedpr-components/dataset")
+
+include ":wedpr-components-token-auth"
+project(":wedpr-components-token-auth").projectDir=file("wedpr-components/token-auth")
+
+include ":wedpr-components-scheduler"
+project(":wedpr-components-scheduler").projectDir=file("wedpr-components/scheduler")
+
+include "wedpr-components-security"
+project(":wedpr-components-security").projectDir=file("wedpr-components/security")
+
+include ":wedpr-components-task-plugin-api"
+project(":wedpr-components-task-plugin-api").projectDir=file("wedpr-components/task-plugin/api")
+
+include ":wedpr-components-task-plugin-shell"
+project(":wedpr-components-task-plugin-shell").projectDir=file("wedpr-components/task-plugin/shell")
+
+include ":wedpr-components-task-plugin-pir"
+project(":wedpr-components-task-plugin-pir").projectDir=file("wedpr-components/task-plugin/pir")
+
+include ":wedpr-components-spi"
+project(":wedpr-components-spi").projectDir=file("wedpr-components/spi")
+
+include "wedpr-components-transport"
+project(":wedpr-components-transport").projectDir=file("wedpr-components/transport")
+
+include "wedpr-components-crypto"
+project(":wedpr-components-crypto").projectDir=file("wedpr-components/crypto")
+
+include "wedpr-components-api-credential"
+project(":wedpr-components-api-credential").projectDir=file("wedpr-components/api-credential")
+
+include "wedpr-components-db-mapper-dataset"
+project(":wedpr-components-db-mapper-dataset").projectDir=file("wedpr-components/db-mapper/dataset")
+
+include "wedpr-components-db-mapper-service-publish"
+project(":wedpr-components-db-mapper-service-publish").projectDir=file("wedpr-components/db-mapper/service-publish")
+
+include ":wedpr-components-jupyter-intergration"
+project(":wedpr-components-jupyter-intergration").projectDir=file("wedpr-components/env-integration/jupyter")
+
+include "wedpr-components-hook"
+project(":wedpr-components-hook").projectDir=file("wedpr-components/hook")
+
+include "wedpr-components-user"
+project(":wedpr-components-user").projectDir=file("wedpr-components/user")
+
+include ":wedpr-components-initializer"
+project(":wedpr-components-initializer").projectDir=file("wedpr-components/initializer")
+
+include "wedpr-worker"
+project(":wedpr-worker").projectDir=file("wedpr-worker")
+
+include "wedpr-pir"
+project(":wedpr-pir").projectDir=file("wedpr-pir")
+
+include "wedpr-site"
+project(":wedpr-site").projectDir=file("wedpr-site")
+
+
+include ":wedpr-components-service-publish"
+project(":wedpr-components-service-publish").projectDir=file("wedpr-components/service-publish")
+
+include ":wedpr-components-service-sdk-pir"
+project(":wedpr-components-service-sdk-pir").projectDir=file("wedpr-components/service-sdk/pir")
+
+include ':wedpr-components-key-generator'
+project(':wedpr-components-key-generator').projectDir=file("wedpr-components/key-generator")
+
+include "wedpr-components-report"
+project(":wedpr-components-report").projectDir=file("wedpr-components/report")
+

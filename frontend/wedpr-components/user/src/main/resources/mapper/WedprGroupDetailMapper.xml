@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.webank.wedpr.components.user.mapper.WedprGroupDetailMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.webank.wedpr.components.user.entity.WedprGroupDetail">
+        <id column="group_id" property="groupId" />
+        <result column="username" property="username" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="create_by" property="createBy" />
+        <result column="update_by" property="updateBy" />
+        <result column="status" property="status" />
+    </resultMap>
+
+    <!-- 结果映射 -->
+    <resultMap id="groupUserResultMap" type="com.webank.wedpr.components.user.response.WedprUserResponse">
+        <result property="username" column="username" />
+        <result property="roleName" column="roleName" />
+        <result property="phone" column="phone" />
+        <result property="email" column="email" />
+        <result property="createTime" column="createTime" />
+        <result property="updateTime" column="updateTime" />
+    </resultMap>
+
+    <select id="selectGroupUserPage" resultMap="groupUserResultMap">
+        SELECT gd.username as username, rp.role_name as roleName, u.phone, u.email,
+               gd.create_time as createTime, gd.update_time as updateTime
+        FROM wedpr_group_detail gd
+        JOIN wedpr_user u ON gd.username = u.username
+        JOIN wedpr_user_role ur ON u.username = ur.username
+        JOIN wedpr_role_permission rp ON ur.role_id = rp.role_id
+        <where>
+            <if test="groupId != null">AND gd.group_id = #{groupId}</if>
+            <if test="username != null and username.trim() != ''">
+                AND gd.username LIKE CONCAT('%', #{username}, '%')
+            </if>
+        </where>
+        ORDER BY gd.create_time DESC
+    </select>
+
+</mapper>
