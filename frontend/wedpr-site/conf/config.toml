@@ -1,7 +1,7 @@
 [cryptoMaterial]
 
 certPath = "conf"                           # The certification path
-disableSsl = "false"                        # Communication with nodes without SSL
+disableSsl = "true"                         # 无 sdk.key 时先关闭 SSL 连接管理端 BCOS
 useSMCrypto = "false"                       # RPC SM crypto type
 
 # The following configurations take the certPath by default if commented
@@ -18,8 +18,8 @@ useSMCrypto = "false"                       # RPC SM crypto type
 
 [network]
 messageTimeout = "10000"
-defaultGroup="group0"                            # Console default group to connect
-peers=["127.0.0.1:20200"]    # The peer list to connect
+defaultGroup="group0"
+peers=["10.60.94.123:20200"]
 
 [account]
 keyStoreDir = "account"         # The directory to load/store the account file, default is "account"

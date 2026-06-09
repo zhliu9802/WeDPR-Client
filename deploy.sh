@@ -43,6 +43,7 @@ load_conf() {
     MYSQL_ROOT_USER="${MYSQL_ROOT_USER:-root}"
     MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
     GATEWAY_GRPC_PORT="${GATEWAY_GRPC_PORT:-40600}"
+    GATEWAY_IP="${GATEWAY_IP:-${SITE_IP}}"
     GATEWAY_API_TOKEN="${GATEWAY_API_TOKEN:-wedpr_api_token_agency0}"
     SITE_TRANSPORT_PORT="${SITE_TRANSPORT_PORT:-6001}"
     BLOCKCHAIN_GROUP="${BLOCKCHAIN_GROUP:-group0}"
@@ -58,7 +59,7 @@ load_conf() {
     TIMEZONE="${TIMEZONE:-Asia/Shanghai}"
 
     SITE_DIST="$(cd "${DEPLOY_DIR}" 2>/dev/null && pwd || echo "${SITE_DIR}/dist")"
-    GATEWAY_TARGET="ipv4:${SITE_IP}:${GATEWAY_GRPC_PORT}"
+    GATEWAY_TARGET="ipv4:${GATEWAY_IP}:${GATEWAY_GRPC_PORT}"
     JDBC_URL="jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?characterEncoding=UTF-8&allowMultiQueries=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8"
 }
 
@@ -181,7 +182,8 @@ cmd_build() {
     check_java
     cd "${FRONTEND_DIR}"
     chmod +x gradlew
-    local gradle_args=(":wedpr-site:jar")
+    # 需构建全部子模块 jar，否则 dist/lib 缺少 wedpr-components 等依赖
+    local gradle_args=("jar")
     [[ "${SKIP_TESTS}" == "true" ]] && gradle_args+=("-x" "test")
     export GRADLE_OPTS="${GRADLE_OPTS:--Xmx4096m}"
     ./gradlew "${gradle_args[@]}"
@@ -193,7 +195,7 @@ cmd_build() {
     check_node
     cd "${WEB_DIR}"
     if [[ "${SKIP_NPM_INSTALL}" != "true" ]]; then
-        npm install
+        npm install --legacy-peer-deps
     fi
     npm run build:pro
 
@@ -238,6 +240,9 @@ cmd_init_db() {
     fi
     mysql -h"${MYSQL_HOST}" -P"${MYSQL_PORT}" -u"${MYSQL_USER}" "${auth[@]}" "${MYSQL_DB}" < "${DB_DIR}/wedpr_ddl.sql"
     mysql -h"${MYSQL_HOST}" -P"${MYSQL_PORT}" -u"${MYSQL_USER}" "${auth[@]}" "${MYSQL_DB}" < "${DB_DIR}/wedpr_dml.sql"
+    if [[ -f "${DB_DIR}/tables_quartz.sql" ]]; then
+        mysql -h"${MYSQL_HOST}" -P"${MYSQL_PORT}" -u"${MYSQL_USER}" "${auth[@]}" "${MYSQL_DB}" < "${DB_DIR}/tables_quartz.sql"
+    fi
     if mysql -h"${MYSQL_HOST}" -P"${MYSQL_PORT}" -u"${MYSQL_USER}" "${auth[@]}" "${MYSQL_DB}" \
         -e "SHOW COLUMNS FROM wedpr_dataset LIKE 'differential_privacy_meta';" 2>/dev/null | grep -q differential_privacy_meta; then
         info "差分隐私字段已存在，跳过迁移"
@@ -345,6 +350,10 @@ EOF
     rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
     nginx -t
     systemctl reload nginx
+    # CentOS/RHEL 开启 SELinux 时，需允许 Nginx 反向代理连接后端
+    if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
+        setsebool -P httpd_can_network_connect 1 2>/dev/null && info "已开启 SELinux: httpd_can_network_connect"
+    fi
     info "Nginx 已配置，访问: http://${SITE_IP}:${NGINX_PORT}/"
 }
 
@@ -377,7 +386,7 @@ cmd_status() {
     echo "管理端登记提醒:"
     echo "  在 http://${ADMIN_IP}/ 机构管理中新建:"
     echo "    agencyName=${AGENCY_NAME}"
-    echo "    gatewayEndpoint=${SITE_IP}:${GATEWAY_GRPC_PORT}"
+    echo "    gatewayEndpoint=${GATEWAY_IP}:${GATEWAY_GRPC_PORT}"
 }
 
 cmd_install_deps() {
@@ -414,7 +423,7 @@ cmd_all() {
     echo ""
     info "一键部署完成！"
     info "站点访问: http://${SITE_IP}:${NGINX_PORT}/  账号 admin / 123456"
-    warn "请在管理端 http://${ADMIN_IP}/ 登记机构 ${AGENCY_NAME}，Gateway ${SITE_IP}:${GATEWAY_GRPC_PORT}"
+    warn "请在管理端 http://${ADMIN_IP}/ 登记机构 ${AGENCY_NAME}，Gateway ${GATEWAY_IP}:${GATEWAY_GRPC_PORT}"
 }
 
 print_help() {
