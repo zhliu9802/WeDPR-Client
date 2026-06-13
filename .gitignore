@@ -49,5 +49,20 @@ logs/
 deploy.conf
 *.pem
 *.key
+*.keytab
 .env
 .env.*
+
+# 站点端运行配置（含密码/密钥，按环境填写，不入库）
+frontend/wedpr-site/conf/wedpr.properties
+frontend/wedpr-site/conf/config.toml
+
+# 区块链 SDK 证书（从节点 sdk/ 目录拷入，按环境提供，不入库）
+**/ca.crt
+**/sdk.crt
+**/sdk.nodeid
+sm_ca.crt
+sm_sdk.crt
+sm_ssdk.crt
+# 项目根放置的链证书目录
+/sdk/
