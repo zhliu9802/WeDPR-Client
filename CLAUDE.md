@@ -73,7 +73,23 @@ Key structural facts that span multiple files:
 - **Thin controllers, thick components.** `wedpr-site/src/main/java/.../site/controller/*` only exposes REST endpoints; real logic is delegated into `wedpr-components`. When changing behavior, the logic usually lives in a component module, not in the site controller.
 - **Cross-institution sync.** `wedpr-components/sync` + `wedpr-components/blockchain` replicate resource metadata across agencies via FISCO BCOS. The Solidity contracts are in `frontend/wedpr-sol/` (`ResourceLogRecord`, `ResourceSequencer`, and factories); their deployed addresses are configured in `deploy.conf` (`RECORDER_FACTORY_CONTRACT`, `SEQUENCER_CONTRACT`).
 - **Gateway / compute path.** `wedpr-components/transport` loads the `wedpr-gateway-sdk` (JNI) to reach the C++ `ppc-gateway-service` (gRPC, default port 40600). The site dispatches privacy-compute tasks (PSI/PIR/MPC/modeling) to C++ nodes over HTTP RPC and routes cross-agency traffic through the gateway. Each agency has a unique `AGENCY_NAME` and transport `nodeID` (`wedpr-site-node-${AGENCY_NAME}`).
-- **Config flow.** `deploy.sh config` renders `deploy.conf` values into the site's `.properties` / `config.toml` and the web build, then copies them into `wedpr-site/dist/conf/`. Treat `deploy.conf` as the single source of truth for environment wiring (IPs, MySQL, ports, contract addresses, gateway token); editing dist configs by hand will be overwritten on the next `config`/`build`.
+- **Config flow.** `deploy.sh config` renders `deploy.conf` values into the site's `.properties` / `config.toml` and the web build, then copies them into `wedpr-site/dist/conf/`. Treat `deploy.conf` as the single source of truth for environment wiring (IPs, MySQL, ports, contract addresses, gateway token, storage backend); editing dist configs by hand will be overwritten on the next `config`/`build`.
+- **Storage backend.** Uploaded datasets land in either local disk or HDFS, chosen by `wedpr.storage.type` (LOCAL/HDFS) in `application-wedpr.properties`, driven from `deploy.conf`'s `STORAGE_TYPE` / `STORAGE_LOCAL_BASEDIR` / `HDFS_*` keys. Raw data always stays on the originating site (never uploaded to the admin end, never copied cross-agency). The `dataSourceType=HDFS` (a data *source*) is orthogonal to `wedpr.storage.type=HDFS` (the *backend*) — don't conflate them.
+
+## Documentation
+
+Substantial architecture docs live in `docs/`. Read these before deep work in a given area rather than reverse-engineering from scratch:
+
+- `docs/站点端本地构建与服务器部署指南.md` — the most detailed build/deploy manual.
+- `docs/architecture/WeDPR系统架构说明.md` — layered architecture and component relationships.
+- `docs/architecture/phase1_admin_site_integration.md` — admin↔site metadata sync, admin APIs.
+- `docs/architecture/phase2_site_runtime.md` — startup, scheduling, API layering.
+- `docs/architecture/Phase3_数据上传全流程解析.md` — dataset upload, persistence, storage backend, on-chain sync, differential privacy.
+- `docs/architecture/Phase4_隐私计算任务详解.md` — PSI/MPC/ML/PIR data I/O specs (how tasks consume datasets).
+- `docs/architecture/phase4_privacy_compute_task_flow_and_io.md` — task creation, scheduling, cross-agency execution.
+- `docs/architecture/phase5_blockchain_contract_deploy_and_onchain_data_sync.md` — contract deployment and on-chain resource sync.
+
+Note the two distinct Phase4 files: `Phase4_隐私计算任务详解.md` (task data I/O) vs `phase4_privacy_compute_task_flow_and_io.md` (task scheduling flow).
 
 ## Conventions
 
