@@ -50,6 +50,15 @@ load_conf() {
     BLOCKCHAIN_PEER="${BLOCKCHAIN_PEER:-${ADMIN_IP}:20200}"
     RECORDER_FACTORY_CONTRACT="${RECORDER_FACTORY_CONTRACT:-0x4721d1a77e0e76851d460073e64ea06d9c104194}"
     SEQUENCER_CONTRACT="${SEQUENCER_CONTRACT:-0x6849f21d1e455e9f0712b1e99fa4fcd23758e8f1}"
+    STORAGE_TYPE="${STORAGE_TYPE:-LOCAL}"
+    STORAGE_LOCAL_BASEDIR="${STORAGE_LOCAL_BASEDIR:-./wedpr/localStorage/}"
+    HDFS_URL="${HDFS_URL:-hdfs://127.0.0.1:9000}"
+    HDFS_USER="${HDFS_USER:-root}"
+    HDFS_BASEDIR="${HDFS_BASEDIR:-/user/wedpr/${AGENCY_NAME}}"
+    HDFS_ENABLE_KRB5="${HDFS_ENABLE_KRB5:-false}"
+    HDFS_KRB5_CONF="${HDFS_KRB5_CONF:-./krb5.conf}"
+    HDFS_KRB5_PRINCIPAL="${HDFS_KRB5_PRINCIPAL:-}"
+    HDFS_KRB5_KEYTAB="${HDFS_KRB5_KEYTAB:-./hdfs-wedpr.keytab}"
     DEPLOY_DIR="${DEPLOY_DIR:-${SITE_DIR}/dist}"
     ENABLE_NGINX="${ENABLE_NGINX:-true}"
     NGINX_PORT="${NGINX_PORT:-80}"
@@ -155,6 +164,16 @@ cmd_config() {
     if [[ -f "${app_props}" ]]; then
         set_property "${app_props}" "server.port" "8005"
         set_property "${app_props}" "server.type" "site_end"
+        # 数据集存储后端
+        set_property "${app_props}" "wedpr.storage.type" "${STORAGE_TYPE}"
+        set_property "${app_props}" "wedpr.storage.local.basedir" "${STORAGE_LOCAL_BASEDIR}"
+        set_property "${app_props}" "wedpr.storage.hdfs.url" "${HDFS_URL}"
+        set_property "${app_props}" "wedpr.storage.hdfs.user" "${HDFS_USER}"
+        set_property "${app_props}" "wedpr.storage.hdfs.baseDir" "${HDFS_BASEDIR}"
+        set_property "${app_props}" "wedpr.storage.hdfs.enableKrb5Auth" "${HDFS_ENABLE_KRB5}"
+        set_property "${app_props}" "wedpr.storage.hdfs.krb5ConfigPath" "${HDFS_KRB5_CONF}"
+        set_property "${app_props}" "wedpr.storage.hdfs.krb5Principal" "${HDFS_KRB5_PRINCIPAL}"
+        set_property "${app_props}" "wedpr.storage.hdfs.krb5KeytabPath" "${HDFS_KRB5_KEYTAB}"
     fi
 
     info "配置已写入 ${conf_dir}"
@@ -162,6 +181,17 @@ cmd_config() {
     info "  站点 IP: ${SITE_IP}"
     info "  Gateway: ${GATEWAY_TARGET}"
     info "  区块链: ${BLOCKCHAIN_PEER}"
+    info "  存储后端: ${STORAGE_TYPE}$([[ "${STORAGE_TYPE}" == "HDFS" ]] && echo " (${HDFS_URL}${HDFS_BASEDIR})" || echo " (${STORAGE_LOCAL_BASEDIR})")"
+
+    if [[ "${STORAGE_TYPE}" == "HDFS" ]]; then
+        [[ -z "${HDFS_URL}" ]] && warn "STORAGE_TYPE=HDFS 但 HDFS_URL 为空，站点将无法写入数据集"
+        if [[ "${HDFS_ENABLE_KRB5}" == "true" ]]; then
+            [[ -z "${HDFS_KRB5_PRINCIPAL}" ]] && warn "已开启 Kerberos，但 HDFS_KRB5_PRINCIPAL 为空"
+            [[ -f "${SITE_DIR}/conf/$(basename "${HDFS_KRB5_KEYTAB}")" ]] || warn "请将 keytab(${HDFS_KRB5_KEYTAB}) 与 krb5.conf 放入 ${SITE_DIR}/conf/"
+        else
+            warn "HDFS 未启用 Kerberos，仅以 ${HDFS_USER} 弱身份访问；生产跨企业部署建议设 HDFS_ENABLE_KRB5=true"
+        fi
+    fi
 }
 
 sync_dist_conf() {

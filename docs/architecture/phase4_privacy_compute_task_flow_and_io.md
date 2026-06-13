@@ -1,7 +1,7 @@
 # Phase4：站点端隐私计算任务全流程与 I/O 接口规范
 
 > 本文档基于 WeDPR 源码，详细说明**站点端项目空间**中各类隐私计算任务从**任务提交 → 调度编排 → 数据读取/prepare → 算子执行 → 结果落盘**的完整链路，并给出各任务类型的**输入/输出接口规范**。  
-> 前置阅读：[`phase3_dataset_upload_and_compute_io.md`](phase3_dataset_upload_and_compute_io.md)（数据上传与数据集 I/O）、[`phase2_site_runtime.md`](phase2_site_runtime.md)（站点端运行机制）。
+> 前置阅读：[`Phase3_数据上传全流程解析.md`](Phase3_数据上传全流程解析.md)（数据上传与数据集 I/O）、[`phase2_site_runtime.md`](phase2_site_runtime.md)（站点端运行机制）。
 
 ---
 
@@ -119,7 +119,7 @@ PIR                     → ExecutorType.PIR → PirExecutor
 
 ## 3. 统一数据模型与读取规范
 
-> 数据集上传与落盘细节见 Phase3 §6。本节聚焦**任务执行时**如何读数。
+> 数据集上传与落盘细节见 Phase3 §4；任务侧统一数据模型（FileMeta / DatasetInfo）见 [`Phase4_隐私计算任务详解.md`](Phase4_隐私计算任务详解.md) §1。本节聚焦**任务执行时**如何读数。
 
 ### 3.1 FileMeta — 数据集引用
 
@@ -750,7 +750,7 @@ auto reader = _dataResourceLoader->loadReader(_dataResource->desc(), DataSchema:
 
 ## 12. 相关文档
 
-- [Phase3：数据上传与任务 I/O 基础](phase3_dataset_upload_and_compute_io.md) — 数据集入库、FileMeta 模型
+- [Phase3：数据上传与任务 I/O 基础](Phase3_数据上传全流程解析.md) — 数据集入库、FileMeta 模型
 - [Phase2：站点端运行机制](phase2_site_runtime.md) — 启动、调度、API 分层
 - [Phase1：管理端与站点端接入](phase1_admin_site_integration.md) — 元数据同步、Job 链上同步
 - [WeDPR 系统架构说明](WeDPR系统架构说明.md) — 整体架构

@@ -138,6 +138,66 @@ RECORDER_FACTORY_CONTRACT=0x4721d1a77e0e76851d460073e64ea06d9c104194
 SEQUENCER_CONTRACT=0x6849f21d1e455e9f0712b1e99fa4fcd23758e8f1
 
 # -----------------------------------------------------------------------------
+# 数据集存储后端（原始数据落盘位置：本地磁盘 或 HDFS）
+# -----------------------------------------------------------------------------
+# 说明:
+#   - 这些值写入 application-wedpr.properties，决定上传的数据集文件最终存哪。
+#   - 原始数据始终落在「本站点」的存储后端，不会上传到管理端，也不跨机构复制。
+#   - 多机构部署时，每个站点各自配置自己掌控的存储；切勿多机构共用同一 HDFS。
+
+# STORAGE_TYPE: 存储后端类型
+#   - 写入 application-wedpr.properties → wedpr.storage.type
+#   - LOCAL : 数据落在站点服务器本地磁盘（STORAGE_LOCAL_BASEDIR），单机部署最简单
+#   - HDFS  : 数据写入远端 HDFS 集群（需配置下方 HDFS_* 参数）
+#   - 注意: 此项与「数据源类型 HDFS（引用已有 CSV）」无关，它决定的是所有上传数据的落盘后端
+STORAGE_TYPE=LOCAL
+
+# STORAGE_LOCAL_BASEDIR: LOCAL 模式下的数据根目录
+#   - 写入 application-wedpr.properties → wedpr.storage.local.basedir
+#   - 仅 STORAGE_TYPE=LOCAL 时生效；相对路径相对于站点运行目录（dist）
+#   - 生产环境建议用绝对路径并挂到数据盘，如 /data/wedpr/localStorage/
+STORAGE_LOCAL_BASEDIR=./wedpr/localStorage/
+
+# HDFS_URL: HDFS NameNode 地址（仅 STORAGE_TYPE=HDFS 时必填）
+#   - 写入 application-wedpr.properties → wedpr.storage.hdfs.url
+#   - 格式 hdfs://<host>:<port>，如 hdfs://wedpr-0001:9900 或 hdfs://127.0.0.1:9000
+#   - 该地址应指向本机构自己掌控、网络可达的 HDFS 集群
+HDFS_URL=hdfs://127.0.0.1:9000
+
+# HDFS_USER: 访问 HDFS 的用户名（仅 STORAGE_TYPE=HDFS 生效）
+#   - 写入 application-wedpr.properties → wedpr.storage.hdfs.user
+#   - 未开 Kerberos 时，以该用户身份（createRemoteUser）读写 HDFS
+#   - 需对 HDFS_BASEDIR 目录有读写权限
+HDFS_USER=root
+
+# HDFS_BASEDIR: 本站点在 HDFS 上的数据根目录（仅 STORAGE_TYPE=HDFS 生效）
+#   - 写入 application-wedpr.properties → wedpr.storage.hdfs.baseDir
+#   - 所有数据集文件存放在此目录下；多机构共用一个集群时务必各用独立路径
+#   - 建议含机构名以隔离，如 /user/wedpr/agency0
+HDFS_BASEDIR=/user/wedpr/agency0
+
+# HDFS_ENABLE_KRB5: 是否启用 Kerberos 认证（仅 STORAGE_TYPE=HDFS 生效）
+#   - 写入 application-wedpr.properties → wedpr.storage.hdfs.enableKrb5Auth
+#   - false : 用 HDFS_USER 弱身份访问（仅适合内网测试）
+#   - true  : 启用 Kerberos，需同时配置下方 KRB5_* 三项；生产跨企业部署强烈建议开启
+HDFS_ENABLE_KRB5=false
+
+# HDFS_KRB5_CONF: krb5.conf 配置文件路径（仅 HDFS_ENABLE_KRB5=true 生效）
+#   - 写入 application-wedpr.properties → wedpr.storage.hdfs.krb5ConfigPath
+#   - 相对路径相对于 serviceConfigPath（dist/conf）；该文件需随配置一起放入 conf 目录
+HDFS_KRB5_CONF=./krb5.conf
+
+# HDFS_KRB5_PRINCIPAL: Kerberos 主体（仅 HDFS_ENABLE_KRB5=true 生效）
+#   - 写入 application-wedpr.properties → wedpr.storage.hdfs.krb5Principal
+#   - 形如 hdfs-wedpr@NODE.DC1.CONSUL，与 keytab 匹配
+HDFS_KRB5_PRINCIPAL=
+
+# HDFS_KRB5_KEYTAB: Kerberos keytab 文件路径（仅 HDFS_ENABLE_KRB5=true 生效）
+#   - 写入 application-wedpr.properties → wedpr.storage.hdfs.krb5KeytabPath
+#   - 相对路径相对于 serviceConfigPath（dist/conf）；keytab 含凭据，注意权限与保密
+HDFS_KRB5_KEYTAB=./hdfs-wedpr.keytab
+
+# -----------------------------------------------------------------------------
 # 安装路径
 # -----------------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-# Phase3：站点端数据上传全流程与隐私计算任务 I/O 规范
+# Phase3：站点端数据上传全流程
 
 > 本文档基于 WeDPR 源码，详细说明**站点端数据上传**的完整链路（本地落盘、区块链存证、元数据同步），以及**不同格式数据在参与隐私计算任务时的统一输入/输出接口规范**。  
 > 前置阅读：[`phase1_admin_site_integration.md`](phase1_admin_site_integration.md)、[`phase2_site_runtime.md`](phase2_site_runtime.md)。
@@ -29,6 +29,14 @@
 ### 1.3 支持的数据形态与边界说明
 
 > **一句话**：WeDPR 当前版本是**表格型（Structured / Tabular）隐私计算平台**，不是通用的非结构化媒体存储或深度学习数据管道。
+
+> **源码核实结论（2026-06，已逐文件确认）**：「不支持图像/视频」属实，证据链如下：
+> 1. **枚举封闭**：`DataSourceType`（`db-mapper/dataset/.../DataSourceType.java`）只有 `CSV, EXCEL, DB, HDFS, HIVE` 五值，`fromStr()` 对未知类型直接 `throw new DatasetException("Unsupported data source type")`。
+> 2. **分发器封闭**：`DataSourceProcessorDispatcher` 构造时只 `registerDataSourceProcessor` 这五种，且 static 块对每种类型预检；无任何 IMAGE/VIDEO 处理器，目录下也仅有 Csv/Xlsx/DB/Hdfs/Hive 五个 Processor。
+> 3. **分析阶段强制按 UTF-8 文本解析**：所有 Processor 的 `analyzeData()` 最终走 `CsvUtils.readCsvHeader()`，内部 `Files.newBufferedReader(path, StandardCharsets.UTF_8)` + `CSVReader`。二进制媒体（PNG/MP4）会触发 `MalformedInputException` 或解析出乱码表头 → 数据集进 `Failure`，无法 `Success`，故不能参与任务。
+> 4. **前端入口封闭**：`wedpr-web/src/views/dataCreate/index.vue` 上传控件 `accept=".csv"` / `accept=".xls,.xlsx"`，下拉仅 CSV/EXCEL/DB/HDFS/HIVE 分支，无图像/视频入口。
+> 5. **全仓无媒体处理代码**：Java 侧搜索 `IMAGE/VIDEO/AUDIO/multimodal/tensor/embedding` 仅命中登录验证码（`image-code`），与数据集管道无关。
+
 
 #### 1.3.1 支持 vs 不支持
 
@@ -96,19 +104,16 @@ HDFS 类型语义是「引用 HDFS 上**已有的 CSV 文件**」，而非任意
 
 #### 1.3.6 若业务需要图片/视频/非结构化数据
 
-标准产品**不提供**开箱能力，常见扩展路径如下（均需二次开发）：
+标准产品**不提供**开箱能力，但有四条二次开发路径（按改动量从小到大）：
 
-1. **特征化后再入库（推荐）**  
-   在站点外完成预处理（如 CNN 提取 Embedding、视频抽帧再提特征），将结果写成 CSV（每行一个样本，列为特征向量或元数据字段），再走现有 CSV 上传 + PSI/MPC/ML 流程。
+| 路径 | 工作量 | 能否复用现有 PSI/MPC/ML |
+|------|--------|------------------------|
+| ① 站外特征化为 CSV（**强烈推荐**） | 小 | ✅ 完全复用 |
+| ② 扩展 `DataSourceProcessor`（落盘仍为 CSV） | 中 | ⚠️ 取决于落盘格式 |
+| ③ HDFS 存原始媒体 + 旁路 Worker | 大 | ❌ 另起管道 |
+| ④ 联邦大模型 / 多模态 | 很大 | ❌ 另起管道 |
 
-2. **扩展 `DataSourceProcessor`**  
-   新增如 `IMAGE` 类型，在 `prepareData` 中解码并转为自定义中间格式；同时扩展 Scheduler Executor Hook 与 C++ 算子，工作量较大，且与现有 PSI/MPC 管道不直接兼容。
-
-3. **HDFS 存原始媒体 + 旁路 Worker**  
-   原始二进制放 HDFS，在自定义任务 Worker 中读取；需重新定义 JobParam、Hook 及 Gateway 协议，基本属于新算子而非配置级扩展。
-
-4. **联邦大模型 / 多模态**  
-   不能复用当前「CSV → FileMeta → CSVFileParser」管道；需在站点端单独设计参数格式、分片传输与 C++ 推理接口（参见 §11.2）。
+> 完整方案（每条的改动点、隐私语义、选型建议）见 **§8.4 接入图像/视频/非结构化数据**。
 
 ---
 
@@ -160,14 +165,19 @@ sequenceDiagram
 
 ### 2.3 统一处理管道
 
-所有 Processor 实现 `DataSourceProcessor.processData()` 四阶段：
+所有 Processor 实现 `DataSourceProcessor.processData()`，模板方法固定如下顺序（`DataSourceProcessor.java:33`）：
 
 ```
-prepareData()  →  准备（合并分片 / 格式转换 / 拉取远程数据）
-analyzeData()  →  分析（表头、行数、MD5、文件大小）
-uploadData()   →  持久化到 FileStorageInterface
-cleanupData()  →  清理临时文件（finally 块保证执行）
+prepareData()                          →  准备（合并分片 / 格式转换 / 拉取远程数据）
+analyzeData()                          →  分析（表头、行数、MD5、文件大小）
+DifferentialPrivacyProcessor.applyIfEnabled()       →  可选：差分隐私加噪（落盘前对指定数值列加噪，详见 §4.4）
+uploadData()                           →  持久化到 FileStorageInterface
+DifferentialPrivacyProcessor.uploadNoisedFileIfNeeded()  →  可选：HDFS 引用型在加噪后补落盘
+cleanupData()                          →  清理临时文件（finally 块保证执行）
 ```
+
+> 差分隐私加噪夹在 **analyze 与 upload 之间**：必须先拿到表头才能定位加噪列，且加噪在持久化前完成，因此存储层落盘的已是加噪后数据。仅 `differentialPrivacyMeta.enabled=true` 时生效，默认关闭。
+
 分发器：`DataSourceProcessorDispatcher`
 
 | dataSourceType | Processor |
@@ -239,6 +249,29 @@ cleanupData()  →  清理临时文件（finally 块保证执行）
 - 全文件 MD5 作为 `identifier`
 - 并发上传上限：**3**，失败重试最多 **5** 次
 
+### 3.4 其余数据集接口
+
+除创建/分片/合并外，`DatasetController` / `DownloadController` 还提供（前缀同为 `/api/wedpr/v3/dataset`）：
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| GET | `/getDataUploadType` | 返回支持的数据源类型（即五种枚举） |
+| GET | `/queryDataset` | 查询单个数据集元数据 |
+| POST | `/queryDatasetList` | 批量查询 |
+| GET | `/listDataset` | 分页列表，支持多条件筛选 |
+| GET | `/previewDatasetData` | 分页预览 CSV 原始数据（`pageSize` 默认 20、上限 100，走 `CsvUtils.readCsvPage`） |
+| POST | `/updateDatasetMeta` / `/updateDataset` / `/updateDatasetList` | 更新元数据 / 单个 / 批量 |
+| POST | `/deleteDataset` / `/deleteDatasetList` | 删除单个 / 批量 |
+| GET | `/getDatasetStoragePath` | 取存储路径（任务侧引用用） |
+| GET | `/getFileShardsInfo` | 下载前获取文件分片信息 |
+| POST | `/downloadFileShardData` | 分片下载文件数据 |
+
+- 批量操作（删除/更新）受 `wedpr.dataset.maxBatchSize`（默认 **32**）限制，超出抛异常。
+- 下载分片大小由 `wedpr.storage.download.shardSize`（默认 **20MB**）控制。
+- 单文件上传受 `spring.servlet.multipart.max-file-size`（默认 **20MB**）限制；分片机制使大文件能绕过单请求体限制。
+
+> **关于 `approvalChain`**：源码核实，`createDataset` 要求该字段非空并落库（`Dataset.approvalChain`），但**数据集进入 `Success` 不依赖任何审批动作**——处理完成即自动置 Success。审批链字段供上层授权/审计流程消费，不构成数据上传的阻塞门槛。
+
 ---
 
 ## 4. 不同格式的解析与落盘
@@ -263,6 +296,40 @@ wedpr.dataset.datasource.excel.defaultSheet=0          # Excel 默认 Sheet
 | 远程拉取临时 CSV | `{largeFileDataDir}/dataset/{datasetId}` |
 | 正式存储（静态） | `{local.basedir}/{user}/{datasetId}` |
 | 正式存储（动态 DB/Hive） | `{local.basedir}/{user}/dy/{timestamp}/{datasetId}` |
+
+### 4.1.1 存储后端如何选定（LOCAL vs HDFS）
+
+「正式存储」落在本地磁盘还是 HDFS，**完全由每个站点自己的配置项 `wedpr.storage.type` 决定**，与上传时选的 `dataSourceType` 无关。
+
+选型链路（源码核实）：
+
+```
+wedpr.storage.type=LOCAL/HDFS
+        │
+        ▼
+StorageBuilder.getInstance(type)          // storage/builder/StorageBuilder.java
+   ├── "LOCAL" → LocalFileStorage          // 写站点服务器本地磁盘
+   └── "HDFS"  → HDFSStorage               // 写远端 HDFS 集群
+```
+
+- `HDFSStorage` 上标注 `@ConditionalOnProperty(value = "wedpr.storage.type", havingValue = "HDFS")` + `@Component("fileStorage")`，仅当配置为 HDFS 时才作为 `fileStorage` Bean 注入。
+- `HDFSStorage` 通过 Hadoop `FileSystem` 连接 `wedpr.storage.hdfs.url` 指向的 NameNode；支持 Kerberos（`wedpr.storage.hdfs.enableKrb5Auth=true` 时用 `loginUserFromKeytab`，否则用 `createRemoteUser(user)` 的弱身份）。
+- `CsvDataSourceProcessor.uploadData()` 调用的是注入的 `FileStorageInterface.upload()`，因此**同一份上传代码**在 LOCAL 配置下写本地、在 HDFS 配置下写远端，processor 本身不感知差异。
+
+> **关键区分**：`dataSourceType=HDFS`（§4.2 HDFS）是「引用 HDFS 上已有 CSV」，其 `uploadData()` 为**空操作**、不复制文件；而「把上传的数据真正存进 HDFS」靠的是全局 `wedpr.storage.type=HDFS`。两者是正交的概念，勿混淆。
+
+### 4.1.2 客户端不直连存储
+
+浏览器/客户端**永远不直接写 HDFS**。数据流固定为两段：
+
+```
+客户端浏览器 ──分片HTTP上传──> 站点端本地临时目录(largeFileDataDir) ──FileStorage.upload()──> LOCAL磁盘 / 远端HDFS
+```
+
+1. **第一段（恒走站点本地磁盘）**：前端按 0.5MB 分片 + 全文件 MD5 上传到 `/uploadChunkData`，分片先写站点服务器 `largeFileDataDir`；`mergeChunkData` 合并并校验 MD5。
+2. **第二段（走哪取决于 `wedpr.storage.type`）**：合并后异步 `processData()` 的 `uploadData()` 阶段，由注入的 `FileStorageInterface` 决定落 LOCAL 还是 HDFS。
+
+因此「客户端上传的数据能否到远端 HDFS」的答案是：**配 `wedpr.storage.type=HDFS` 即可，但必经站点端中转，客户端只和站点 HTTP 接口交互。**
 
 ### 4.2 各格式处理差异
 
@@ -304,6 +371,13 @@ flowchart TB
 | cleanupData | `cleanChunkData()` 删除 chunks 目录 |
 
 合并时 MD5 校验（`ChunkUploadImpl`）：合并过程中对分片字节流计算 digest，与前端 `identifier` 比对，不一致则 `Hash value mismatch`。
+
+`mergeChunkData()` 的健壮性细节（`ChunkUploadImpl.java`）：
+
+- **完整性检查**：按 `0..totalCount-1` 逐个核对分片文件存在，缺片直接报错。
+- **并发保护**：合并时用 `FileChannel.tryLock()` 对合并文件加锁，防止重复触发。
+- **双哈希**：同时累计 `identifier`（与前端 MD5 比对）和 `datasetVersionHash`（按 `wedpr.datasource.datasetHash` 算法，作为版本哈希落库）。
+- 兼容 `0x` 前缀的十六进制 identifier。
 
 #### EXCEL
 
@@ -389,6 +463,42 @@ CsvUtils.convertExcelToCsv(mergedFilePath, cvsFilePath, excelDefaultSheet);
 | `datasetStoragePath` | JSON，如 `{"storageType":"LOCAL","filePath":"/abs/path/..."}` |
 | `status` | 0 = Success |
 
+### 4.4 差分隐私加噪（落盘前可选环节）
+
+源码：`DifferentialPrivacyProcessor.java` + `DifferentialPrivacyUtils.java`。在 `processData()` 的 **analyze 与 upload 之间**对指定数值列加噪（见 §2.3）。
+
+**配置（`differentialPrivacyMeta`，建数据集时随请求传入，存 `wedpr_dataset.differential_privacy_meta`）**：
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `enabled` | `false` | 总开关，关闭则整段跳过 |
+| `mechanism` | `laplace` | `laplace` 或 `gaussian` |
+| `epsilon` | 无（必填） | 隐私预算，必须 > 0 |
+| `delta` | 无 | 仅高斯机制需要，须 ∈ (0,1) |
+| `sensitivity` | `1.0` | 敏感度，必须 > 0 |
+| `columns` | `[]` | 加噪目标列名，必须存在于表头 |
+
+**加噪算法（`DifferentialPrivacyUtils.sampleNoise`）**：
+
+- 拉普拉斯：`scale = sensitivity / ε`，噪声 `= -scale · sign(u) · ln(1-2|u|)`，`u ~ U(-0.5, 0.5)`
+- 高斯：`σ = sensitivity · √(2·ln(1.25/δ)) / ε`，噪声 `= N(0,1) · σ`
+
+**处理细节**：
+
+- 逐行读 CSV，仅对 `columns` 命中的列加噪；**非数值单元格跳过**（`NumberFormatException` 记 warn），空值跳过。
+- 加噪写入 `csvPath + ".dp.tmp"`，再 `Files.move` 覆盖原文件；随后 `refreshDatasetFileMeta` **重算 `datasetSize` 与 `datasetVersionHash`**（哈希基于加噪后内容）。
+- **HDFS 引用型的特殊处理**：HDFS 数据源 `uploadData()` 本是空操作（只引用原文件），但一旦加噪，原 HDFS 文件不能被改写，故 `uploadNoisedFileIfNeeded()` 把加噪后的本地文件**额外落盘到用户存储目录**，并把 `datasetStoragePath` 改指向这份新文件。这正是 `processData()` 在 upload 后还要再调一次该方法的原因。
+
+> 含义：开启差分隐私后，**存储层及后续所有任务读到的都是加噪数据**，原始精确值不再参与计算；隐私预算 ε 越小噪声越大。
+
+### 4.5 DB/Hive 凭据的 SM2 加解密
+
+DB 数据源 `dataSourceMeta` 里的 `userName`/`password` 为**前端 SM2 加密**后传入（`encryptionModel=true` 时）：
+
+- 解密：`DBDataSourceProcessor.parseDataSourceMeta()` 调 `PasswordHelper.decryptPassword(cipher, privateKey)`，内部 `SM2Helper.decrypt`；私钥取自 `UserJwtConfig.getPrivateKey()`。
+- 前端 JS 的 SM2 密文后端需补 `04` 前缀再解密（`PasswordHelper.java:18` 注释）。
+- 落库前 `SQLUtils.clearDbDataSource()` 清理敏感连接信息；且链上同步会整体剥离 `dataSourceMeta`（§5.1），故 DB 密码/SQL 既不明文落库也不上链。
+
 ---
 
 ## 5. 区块链存证与元数据同步
@@ -439,282 +549,40 @@ Leader 节点通过 `EventSubscribe` 订阅 `ADDRECORDEVENT`，`ResourceSyncEven
 
 > 管理端 `datasetStoragePath` 仅为**路径描述**，文件仍在站点磁盘/HDFS，管理端无法通过标准接口读取原始内容（详见 phase1 §6.3）。
 
----
+### 5.4 多站点部署下的存储隔离（数据不出域）
 
-## 6. 隐私计算任务的统一数据模型
+多个企业各自部署 wedpr-site 时，**原始数据文件不会跨机构流动**。这由两个事实保证：
 
-### 6.1 关键结论：任务只消费「已落盘的 CSV」
+1. **存储后端是「每站点私有配置」**：`wedpr.storage.type` / `wedpr.storage.hdfs.url` 是每个站点自己 `serviceConfigPath` 下的配置，平台**没有全局共享存储**概念，也没有把原始文件跨站点复制的逻辑。站点 A 的 `FileStorage` 只连 A 配置的存储，永不解析、连接 B 的 HDFS。
+2. **跨机构只有两条通道，均不碰原始文件**：
+   - **元数据**：走 FISCO BCOS，仅同步字段名/行数/哈希/路径描述，且剥离 `dataSourceMeta`（§5.1）。
+   - **隐私计算**：走统一网关（`ppc-gateway-service`，gRPC），交换密文/中间产物。
 
-无论用户上传时是 CSV、Excel、DB 还是 Hive，**入库完成后**存储层文件均为 **CSV 格式**（HDFS 引用型除外，但内容也必须是 CSV 语义）。
+| 部署拓扑 | 后果 |
+|---------|------|
+| 每企业指向自己域内 HDFS（推荐） | 原始数据只进本企业 HDFS，他方拿不到 —— 符合「数据不出域」 |
+| 多企业共用同一 HDFS 集群（错误） | 该 HDFS 物理持有所有企业明文，掌控者可读全部数据，隐私边界被破坏 |
 
-任务参数中通过 **`FileMeta`** 引用数据集：
-
-```java
-public class FileMeta {
-    private String datasetID;      // 推荐：只填 datasetID，运行时解析
-    private String storageTypeStr; // LOCAL / HDFS
-    private String path;           // 绝对或相对存储路径
-    private String owner;
-    private String ownerAgency;
-}
-```
-运行时解析（`FileMeta.obtainDatasetInfo()`）：
-
-```java
-this.dataset = datasetMapper.getDatasetByDatasetId(this.datasetID, false);
-setStorageTypeStr(this.dataset.getDatasetStorageType());
-setPath(this.dataset.getStoragePathMeta().getFilePath());
-setOwner(this.dataset.getOwnerUserName());
-setOwnerAgency(this.dataset.getOwnerAgencyName());
-```
-读取文件（各 Executor Hook 统一模式）：
-
-```java
-storage.download(partyInfo.getDataset().getStoragePath(), localCachePath);
-```
-### 6.2 任务参数公共结构：`DatasetInfo`
-
-```java
-public class DatasetInfo {
-    protected FileMeta dataset;           // 输入数据集
-    protected FileMeta output;            // 输出（部分任务）
-    protected Boolean labelProvider;      // ML：是否标签方
-    protected String labelField;          // ML：标签列，默认 "y"
-    protected Boolean receiveResult;      // 是否接收 PSI 结果
-    protected List<String> idFields;      // PSI/ML：关联键列，默认 ["id"]
-}
-```
-**任务创建时推荐写法**：`dataset.datasetID = "d-xxx"`，其余字段由服务端 `obtainDatasetInfo()` 填充。
-
-### 6.3 动态数据源在任务时的刷新
-
-若创建 DB/Hive 数据集时 `dynamicDataSource=true`：
-
-- 创建时不生成 storagePath
-- 任务执行前 `DatasetStoragePathRetriever.getDatasetStoragePath()` 会 **重新执行** `processData()`（JDBC 查库 → 临时 CSV → upload → 返回新 StoragePath）
-
-适用场景：每次任务使用数据库最新快照。
+> **互通关系**：HDFS 之间**不需要也不应互通**；需要互通的是**网关之间**（gRPC 跨机构路由，只传密文）与**区块链**（接入同一条链同步元数据）。
+> **安全建议**：即便在自己域内，跨企业生产部署应开启 `wedpr.storage.hdfs.enableKrb5Auth=true`，避免 `createRemoteUser` 弱身份导致内部人员直读明文。
 
 ---
 
-## 7. 各任务类型的输入/输出规范
+## 6. 隐私计算任务如何消费数据集
 
-### 7.1 总览表
+数据集入库（`status=Success`）后，隐私计算任务通过 **`FileMeta` + `datasetID`** 引用它，运行时 `obtainDatasetInfo()` 从本站点 DB 解析 `datasetStoragePath`，再由各 Executor Hook `download` 到本地缓存参与计算。PSI / MPC / ML / PIR 四类任务的统一数据模型、各自的输入/输出规范、中间产物与文件命名、以及「各数据源格式 → 任务输入」的对照，已独立成篇：
 
-| 任务类型 | JobParam 类 | 输入 | 中间产物 | 输出 | 数据格式要求 |
-|---------|------------|------|---------|------|-------------|
-| PSI | `PSIJobParam` | 各方 `FileMeta`(datasetID) + `idFields` | `psi_prepare.csv` | `psi_result.csv` | CSV，含 idFields 列 |
-| MPC | `MPCJobParam` | `dataSetList` + mpcContent/sql | `mpc_prepare.csv`、`.mpc` | `mpc_result.csv`、`mpc_output.txt` | CSV；可选先跑 PSI |
-| ML 训练/预测 | `ModelJobParam` | `dataSetList` + modelSetting | 可选 PSI 流程 | 模型文件 / 预测结果 | CSV；需 labelProvider |
-| PIR 服务构建 | `PirServiceSetting` | datasetId + idField | 本地缓存 CSV | MySQL 表 `pir_*` | CSV；发布时导入 DB |
+> **详见 [`Phase4_隐私计算任务详解.md`](Phase4_隐私计算任务详解.md)**
 
-### 7.2 PSI（Private Set Intersection）
+要点速览：
 
-**JobParam**：`PSIJobParam`
-
-```json
-{
-  "jobID": "job-xxx",
-  "taskID": "task-xxx",
-  "user": "admin",
-  "dataSetList": [
-    {
-      "dataset": { "datasetID": "d-aaa" },
-      "idFields": ["id"],
-      "receiveResult": true,
-      "output": null
-    },
-    {
-      "dataset": { "datasetID": "d-bbb" },
-      "idFields": ["user_id"],
-      "receiveResult": false
-    }
-  ]
-}
-```
-**本机构 prepare 流程**（`PSIJobParam.prepare()`）：
-
-```
-1. storage.download(dataset.storagePath → .cache/jobs/{jobId}/文件名)
-2. CSVFileParser.extractFields(全量CSV, idFields → psi_prepare.csv)
-3. storage.upload(psi_prepare.csv → {user}/PSI/{jobId}/psi_prepare.csv)
-4. 更新 partyInfo.dataset 为上传后的 FileMeta
-5. 删除本地临时文件
-```
-**输出路径**（本机构自动生成）：
-
-```
-WeDPRCommonConfig.getUserJobCachePath(user, "PSI", jobId, "psi_result.csv")
-```
-**下发 C++ 层的 Party 结构**（`PartyInfo.PartyData`）：
-
-| 字段 | 含义 |
-|------|------|
-| `input` | prepare 后的 `psi_prepare.csv` 路径 |
-| `output` | 本机构 `psi_result.csv` 路径（仅 SERVER 方） |
-
-**约束**：
-
-- 至少 **2 方**参与
-- 本机构必须在 `dataSetList` 中
-- `idFields` 不可为空
-
-### 7.3 MPC（Secure Multi-Party Computation）
-
-**JobParam**：`MPCJobParam`
-
-```json
-{
-  "sql": "SELECT ...",
-  "mpcContent": "...",
-  "dataSetList": [
-    { "dataset": { "datasetID": "d-aaa" }, "idFields": ["id"] },
-    { "dataset": { "datasetID": "d-bbb" }, "idFields": ["id"] }
-  ]
-}
-```
-- `sql` 与 `mpcContent` 二选一；`sql` 会经 `MpcCodeTranslator` 转为 MPC 代码
-- `needRunPsi`：由 mpcContent 中是否含 `PSI_OPTION = True` 决定
-
-**prepare 流程**（`MPCExecutorHook`）：
-
-**无 PSI**：
-
-```
-storage.download(本机构 dataset → 本地)
-MpcUtils.makeDatasetToMpcDataDirect(CSV → mpc_prepare.csv)
-storage.upload(mpc_prepare.csv)
-```
-**有 PSI**（`prepareWithPsi`）：
-
-```
-download 本机构原始 CSV
-download psi_result.csv
-MpcUtils.mergeAndSortById(CSV + psi_result → mpc_prepare.csv)
-upload mpc_prepare.csv、.mpc 脚本
-```
-**输出路径**（`getMpcPath()`）：
-
-| 文件 | 路径模式 |
-|------|---------|
-| mpc_prepare.csv | `{user}/MPC/{jobId}/mpc_prepare.csv` |
-| {jobId}.mpc | `{user}/MPC/{jobId}/{jobId}.mpc` |
-| mpc_result.csv | `{user}/MPC/{jobId}/mpc_result.csv` |
-| mpc_output.txt | `{user}/MPC/{jobId}/mpc_output.txt` |
-
-### 7.4 ML（联邦机器学习）
-
-**JobParam**：`ModelJobParam`
-
-```json
-{
-  "modelSetting": { "...": "算法超参", "usePsi": true, "useIv": false },
-  "modelPredictAlgorithm": "...",
-  "dataSetList": [
-    {
-      "dataset": { "datasetID": "d-aaa" },
-      "idFields": ["id"],
-      "labelProvider": true,
-      "labelField": "y",
-      "receiveResult": true
-    },
-    {
-      "dataset": { "datasetID": "d-bbb" },
-      "idFields": ["id"],
-      "labelProvider": false
-    }
-  ]
-}
-```
-**约束**：
-
-- 必须指定 **labelProvider** 方（持有标签列）
-- 本机构必须在 `dataSetList` 中
-- `usePsi=true` 时走 `MLPSIExecutorHook`，先执行 PSI 再训练/预测
-
-**输入解析**（`parseLabelProviderInfo`）：
-
-```
-selfDataset.getDataset().obtainDatasetInfo(datasetMapper)
-modelRequest.setDatasetPath(selfDataset.getDataset().getPath())
-modelRequest.setIsLabelProvider(本机构是否为 labelProvider)
-```
-**PSI 输出作为 ML 输入**（`parseIDFilePath`）：
-
-```
-modelRequest.setIdFilePath(PSI 默认输出路径 psi_result.csv)
-```
-**下游请求转换**：
-
-| 阶段 | 输出类型 |
-|------|---------|
-| Preprocessing | `PreprocessingRequest`（WEDPR_TRAIN / WEDPR_PREDICT） |
-| FeatureEngineering | `FeatureEngineeringRequest`（useIv=true 时） |
-| MultiParty ML | `ModelJobRequest` |
-
-### 7.5 PIR（Private Information Retrieval）
-
-PIR **不通过 JobParam.dataSetList**，而在 **服务发布** 时构建索引。
-
-**入口**：`PirDatasetConstructorImpl.construct(PirServiceSetting)`
-
-```
-1. datasetMapper.getDatasetByDatasetId(datasetId)
-2. StoragePathBuilder.getInstance(storageType, storagePath)
-3. fileStorage.download → PirServiceConfig.getPirCacheDir()/datasetId
-4. 解析 datasetFields（CSV 表头）
-5. CREATE TABLE pir_{datasetId} (业务列 + wedpr_pir_id + wedpr_pir_id_hash)
-6. CSVFileParser.processCsvContent 逐行 INSERT
-```
-**输入规范**：
-
-| 项 | 要求 |
-|----|------|
-| 数据源 | 已 Success 的 datasetId |
-| 文件格式 | 存储层 CSV |
-| idField | 必须在 datasetFields 中存在 |
-| 禁止字段名 | `wedpr_pir_id`、`wedpr_pir_id_hash`（系统保留） |
-
-**输出**：MySQL 表 `pir_{tableId}`，供 PIR 查询引擎使用；查询结果文件默认 `{pirCache}/{user}/{jobId}/pir_result`。
+- 任务侧**只消费已落盘的 CSV**，不感知原始 `dataSourceType`；创建任务只需传 `datasetID` 与列配置（`idFields` / `labelField`）。
+- 每方只读**自己站点**的数据集，prepare 阶段做字段最小化（如 PSI 仅抽 `idFields`），跨机构经网关交换的只有密文/中间产物。
+- 只有 `status=Success(0)` 的数据集可被任务引用（见 §7 状态机）。
 
 ---
 
-## 8. 各数据源格式 → 任务输入的对照
-
-| 原始 dataSourceType | 入库后存储形态 | 任务侧看到的类型 | idFields/labelField 对应 |
-|--------------------|--------------|----------------|------------------------|
-| CSV | LOCAL/HDFS 上 CSV 文件 | `FileMeta` → CSV | CSV 表头列名 |
-| EXCEL | 转 CSV 后存储 | 同 CSV | 同 CSV |
-| DB | JDBC 导出 CSV 后存储 | 同 CSV | SQL 结果列名 |
-| HIVE | Hive SQL 导出 CSV 后存储 | 同 CSV | SQL 结果列名 |
-| HDFS | HDFS 上 CSV（不复制） | `FileMeta` path 指向 HDFS | CSV 表头列名 |
-| DB/HIVE 动态 | 任务时临时导出 CSV | 每次任务重新 processData | 同 CSV |
-
-**重要**：任务创建 UI / API **不需要**也不应该传递 `dataSourceType`；只需传 `datasetID` 和列名配置（`idFields`、`labelField`）。
-
----
-
-## 9. 任务缓存与文件命名约定
-
-配置项（`ExecutorConfig`，可通过 `application-wedpr.properties` 覆盖）：
-
-| 配置键 | 默认值 | 用途 |
-|--------|--------|------|
-| `wedpr.executor.job.cache.dir` | `./.cache/jobs` | 任务本地缓存根目录 |
-| `wedpr.executor.psi.tmp.file.name` | `psi_prepare.csv` | PSI 字段提取临时名 |
-| `wedpr.executor.psi.result.file.name` | `psi_result.csv` | PSI 结果 |
-| `wedpr.executor.mpc.prepare.file.name` | `mpc_prepare.csv` | MPC 输入 |
-| `wedpr.executor.mpc.result.file.name` | `mpc_result.csv` | MPC 结果 |
-| `wedpr.executor.mpc.output.file.name` | `mpc_output.txt` | MPC 文本输出 |
-
-用户级任务路径（`WeDPRCommonConfig.getUserJobCachePath`）：
-
-```
-{storageBase}/{user}/{JobType}/{jobId}/{fileName}
-```
----
-
-## 10. Dataset 状态机
+## 7. Dataset 状态机
 
 | code | 枚举 | 含义 |
 |------|------|------|
@@ -733,28 +601,66 @@ if (status != DatasetStatus.Success.getCode()) {
 ```
 ---
 
-## 11. 二次开发指引
+## 8. 二次开发指引
 
-### 11.1 新增数据源格式
+### 8.1 新增数据源格式
 
 1. 实现 `DataSourceProcessor` 四阶段，**prepareData 阶段归一化为 CSV**
 2. 在 `DataSourceProcessorDispatcher` 注册
 3. 在 `DataSourceType` 枚举中添加类型
 4. 任务侧 **无需修改**（自动通过 FileMeta 读 CSV）
 
-### 11.2 差分隐私 / 联邦大模型微调
+### 8.2 差分隐私 / 联邦大模型微调
 
 - **数据上传链路**：复用现有 Processor + Storage，无需改管理端
 - **任务 I/O**：在 `ModelJobParam` / Executor Hook 中扩展 prepare 逻辑；输入仍为 CSV path，输出写入 `{user}/MPC|ML/{jobId}/`
 - **管理端**：继续只同步元数据；若需平台级模型 registry，可新增 ResourceType 走同一套 ResourceSyncer
 
-### 11.3 管理端读取原始数据
+### 8.3 管理端读取原始数据
 
 标准架构 **不支持**。若业务必须，需自行实现站点代理下载 API，不在本文档范围内。
 
+### 8.4 接入图像/视频/非结构化数据
+
+承接 §1.3.6。四条路径按「改动量从小到大 / 推荐度从高到低」排列；前两条不动平台核心，后两条属于新算子级开发。
+
+| 路径 | 改动范围 | 工作量 | 能否复用现有 PSI/MPC/ML | 隐私语义 |
+|------|---------|--------|------------------------|---------|
+| ① 站外特征化为 CSV（**强烈推荐**） | 仅站外预处理 | 小 | ✅ 完全复用 | 不变（仍是表格密态计算） |
+| ② 扩展 `DataSourceProcessor` | 新增 Processor + 枚举 + 前端入口 | 中 | ⚠️ 取决于落盘是否仍为 CSV | 视实现而定 |
+| ③ HDFS 存原始媒体 + 旁路 Worker | 新 JobParam + Hook + Gateway 协议 + C++ 算子 | 大 | ❌ 另起管道 | 需自行设计 |
+| ④ 联邦大模型 / 多模态 | 全链路新设计 | 很大 | ❌ 另起管道 | 需自行设计 |
+
+**① 站外特征化后再入库（推荐）**
+在站点外完成预处理（CNN 提 Embedding、视频抽帧再提特征、音频转 MFCC 等），把结果写成 CSV（每行一个样本，列为特征向量分量 + 关联键 + 可选标签），再走现有 CSV 上传 + PSI/MPC/ML 流程。
+- **优点**：零平台改动；隐私语义不变，跨机构仍只交换密文；与现有审批、链上存证、调度完全兼容。
+- **代价**：特征工程在域内自行完成；图像/视频原文件不纳入 WeDPR 管理。
+- 适用绝大多数「多方样本对齐 + 联合建模」场景。
+
+**② 扩展 `DataSourceProcessor`（保持表格语义的前提下）**
+若希望把「上传媒体 → 自动特征化」收进平台，可新增 Processor（与 §8.1 同一套扩展点）：
+1. `DataSourceType` 枚举加 `IMAGE`/`VIDEO`；
+2. 实现 `XxxDataSourceProcessor`，**在 `prepareData()` 内完成解码 + 特征提取，落盘仍为 CSV**（关键：让 `analyzeData()` 的 `readCsvHeader` 能正常解析）；
+3. `DataSourceProcessorDispatcher.registerDataSourceProcessor()` 注册；
+4. 前端 `dataCreate/index.vue` 加上传入口与 `accept`。
+- **任务侧无需改动**：只要 `uploadData()` 产出的是 CSV，PSI/MPC/ML 通过 `FileMeta` 读到的仍是 CSV。
+- **注意**：若想保留原始媒体二进制，需同时调整 `uploadData`/存储路径策略，且任务侧不会直接消费二进制。
+
+**③ HDFS 存原始媒体 + 旁路 Worker（新算子）**
+原始二进制放 HDFS，新增自定义任务类型在 Worker 中读取并计算。
+- 需重新定义 `JobParam`、Executor `Hook`、Gateway 传输协议与对应 C++ 算子；
+- `FileMeta` 可指向 HDFS 二进制路径，但 `CSVFileParser` 不再适用，需自写解析；
+- 本质是「在 WeDPR 调度框架内挂一个新算子」，与现有 PSI/MPC 管道并行而非复用。
+
+**④ 联邦大模型 / 多模态**
+不能复用「CSV → FileMeta → CSVFileParser」管道。需在站点端单独设计参数格式、分片传输与 C++ 推理接口；数据上传链路可部分复用（Processor + Storage），但任务 I/O 与跨机构协议要重做（参见 §8.2）。
+
+> **选型建议**：除非有「原始媒体必须由平台统一托管/审计」的硬需求，否则优先选 ①——它用最小成本拿到 WeDPR 的全部隐私保障；②适合产品化收口；③④仅在确需在密态下直接处理非结构化数据时才投入。
+
+
 ---
 
-## 12. 关键源码索引
+## 9. 关键源码索引
 
 | 主题 | 路径 |
 |------|------|
@@ -762,21 +668,26 @@ if (status != DatasetStatus.Success.getCode()) {
 | 分片上传 | `dataset/controller/ChunkUploadController.java` |
 | 分片合并 | `dataset/service/ChunkUploadImpl.java` |
 | CSV Processor | `dataset/datasource/processor/CsvDataSourceProcessor.java` |
+| 处理管道模板 | `dataset/datasource/processor/DataSourceProcessor.java` |
+| 差分隐私加噪 | `dataset/datasource/processor/DifferentialPrivacyProcessor.java` + `utils/DifferentialPrivacyUtils.java` |
+| 差分隐私元数据 | `dataset/datasource/DifferentialPrivacyMeta.java` |
+| DB 凭据 SM2 解密 | `crypto/PasswordHelper.java`（`DBDataSourceProcessor` 调用） |
+| 数据集接口 | `dataset/controller/DatasetController.java` + `controller/DownloadController.java` |
+| 存储后端选型 | `storage/builder/StorageBuilder.java` |
+| HDFS 存储实现 | `storage/impl/hdfs/HDFSStorage.java` |
+| HDFS 存储配置 | `storage/config/HdfsStorageConfig.java` |
 | 链上同步 | `dataset/sync/DatasetSyncer.java` |
 | 链订阅消费 | `dataset/sync/DatasetSyncerCommitHandler.java` |
 | 区块链写入 | `sync/impl/BlockChainResourceSyncImpl.java` |
-| 任务读数据集 | `dataset/datasource/storage/DatasetStoragePathRetriever.java` |
-| FileMeta | `scheduler/executor/impl/model/FileMeta.java` |
-| PSI 参数与 prepare | `scheduler/executor/impl/psi/model/PSIJobParam.java` |
-| MPC 参数 | `scheduler/executor/impl/mpc/MPCJobParam.java` |
-| ML 参数 | `scheduler/executor/impl/ml/model/ModelJobParam.java` |
-| PIR 构建 | `task-plugin/pir/.../PirDatasetConstructorImpl.java` |
 | 前端上传 | `wedpr-web/src/mixin/uploadFile.js` |
+
+> 任务侧源码（`FileMeta`、PSI/MPC/ML 的 JobParam、PIR 构建、`DatasetStoragePathRetriever` 等）索引见 [`Phase4_隐私计算任务详解.md`](Phase4_隐私计算任务详解.md) §6。
 
 ---
 
-## 13. 相关文档
+## 10. 相关文档
 
+- [隐私计算任务详解](Phase4_隐私计算任务详解.md) — PSI/MPC/ML/PIR 的数据 I/O 规范（本文档 §6 的展开）
 - [管理端与站点端接入规范](phase1_admin_site_integration.md) — 元数据同步通道、管理端 API
 - [站点端运行机制](phase2_site_runtime.md) — 启动、调度、API 分层
 - [WeDPR 系统架构说明](WeDPR系统架构说明.md) — 整体架构

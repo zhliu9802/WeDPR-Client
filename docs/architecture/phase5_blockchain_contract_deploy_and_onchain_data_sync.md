@@ -1,7 +1,7 @@
 # Phase5：区块链合约部署与数据上链全流程规范
 
 > 本文档基于 WeDPR 源码，详细说明 **FISCO BCOS 智能合约的部署流程**、**合约如何接入 Java 同步引擎**、**部署后如何重启系统使配置生效**，以及 **四类资源元数据上链的完整链路与数据规范**。  
-> 前置阅读：[`phase1_admin_site_integration.md`](phase1_admin_site_integration.md)（管理端与站点端接入）、[`phase2_site_runtime.md`](phase2_site_runtime.md)（站点端运行机制）、[`phase3_dataset_upload_and_compute_io.md`](phase3_dataset_upload_and_compute_io.md)（数据集上传与 I/O）。
+> 前置阅读：[`phase1_admin_site_integration.md`](phase1_admin_site_integration.md)（管理端与站点端接入）、[`phase2_site_runtime.md`](phase2_site_runtime.md)（站点端运行机制）、[`Phase3_数据上传全流程解析.md`](Phase3_数据上传全流程解析.md)（数据集上传与 I/O）。
 
 ---
 
